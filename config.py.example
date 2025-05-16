@@ -1,0 +1,5 @@
+# Application Configuration
+APP_CONFIG = {
+    'default_folder': r'D:\Pictures',
+    'cache_file': r'C:\Users\user\.cache\.tag_cache.json',
+}
