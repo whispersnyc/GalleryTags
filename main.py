@@ -16,17 +16,11 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import subprocess
-from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
+from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG, FORMAT_CONFIG
 # config.APP_CONFIG = {"default_folder":path_str}
 # config.EXPORT_PATHS = {file_path_str: tags_str ("& tag1, tag2" means AND while '|' prefix means OR, default AND)}
 # config.EXPORT_CONFIG = {'heading': heading_str, 'item_format': "![$fn]($fp/$fn.$fe)\n", "group_by": 5}
-
-# Metadata Field Configuration
-FORMAT_CONFIG = {
-    '.jpg': {'field': '-Exif:ImageDescription', 'extensions': ['.jpg', '.jpeg']},
-    '.png': {'field': '-XMP:Description', 'extensions': ['.png']},
-    '.webp': {'field': '-XMP:Description', 'extensions': ['.webp']},
-}
+# config.FORMAT_CONFIG = {'.ext': '-(Exif/XMP):(Property)', 'extensions': ['.ext', '.extension'], ...}
 
 # Helper to get all supported extensions
 SUPPORTED_EXTENSIONS = [ext for format_info in FORMAT_CONFIG.values() 

@@ -28,3 +28,14 @@ EXPORT_CONFIG = {
     'item_format': "![$fn]($fp/$fn.$fe)\n",
     'group_by': 0,
 }
+
+
+# ---
+
+# Metadata Field Configuration
+
+FORMAT_CONFIG = {
+    '.jpg': {'field': '-Exif:ImageDescription', 'extensions': ['.jpg', '.jpeg']},
+    '.png': {'field': '-XMP:Description', 'extensions': ['.png']},
+    '.webp': {'field': '-XMP:Description', 'extensions': ['.webp']},
+}
