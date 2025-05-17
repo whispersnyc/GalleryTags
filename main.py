@@ -24,11 +24,43 @@ from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
 # config.EXPORT_CONFIG = {'heading': heading_str, 'item_format': "![$fn]($fp/$fn.$fe)\n", "group_by": 5}
 
 # Metadata Field Configuration
-TAG_METADATA_CONFIG = {
-    'xmp_tag': 'dc:description',
-    'xmp_namespace_uri': 'http://purl.org/dc/elements/1.1/',
-    'xmp_namespace_prefix': 'dc',
+FORMAT_CONFIG = {
+    '.jpg': {'field': '-Exif:ImageDescription', 'extensions': ['.jpg', '.jpeg']},
+    '.png': {'field': '-XMP:Description', 'extensions': ['.png']},
+    '.webp': {'field': '-XMP:Description', 'extensions': ['.webp']},
 }
+
+# Helper to get all supported extensions
+SUPPORTED_EXTENSIONS = [ext for format_info in FORMAT_CONFIG.values() 
+                       for ext in format_info['extensions']]
+
+# Platform-specific app data directory
+def get_app_cache_dir():
+    """Get platform-specific cache directory for the application"""
+    app_name = "GalleryTags"
+    if sys.platform == "win32":
+        base_dir = os.environ.get("LOCALAPPDATA")
+        if not base_dir:
+            base_dir = os.path.expanduser("~")
+        cache_dir = os.path.join(base_dir, app_name, "cache")
+    elif sys.platform == "darwin":
+        cache_dir = os.path.expanduser(f"~/Library/Caches/{app_name}")
+    else:  # Linux and other Unix
+        cache_dir = os.path.expanduser(f"~/.cache/{app_name}")
+    
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
+
+# Set up cache file path
+CACHE_FILE = os.path.join(get_app_cache_dir(), "tags_cache.json")
+
+# Helper to get metadata field for a file
+def get_metadata_field(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    for format_info in FORMAT_CONFIG.values():
+        if ext in format_info['extensions']:
+            return format_info['field']
+    return None
 
 def natural_sort_key(s):
     parts = re.split('([0-9]+)', os.path.basename(s))
@@ -36,7 +68,8 @@ def natural_sort_key(s):
 
 def check_exiftool():
     """Check if exiftool is available in the system"""
-    if not shutil.which('exiftool'):
+    exiftool_cmd = 'exiftool.exe' if sys.platform == "win32" else 'exiftool'
+    if not shutil.which(exiftool_cmd):
         msg = """ExifTool is not found in your system PATH. 
 Please install ExifTool and make sure it's accessible from the command line.
 Download from: https://exiftool.org/"""
@@ -44,21 +77,19 @@ Download from: https://exiftool.org/"""
         sys.exit(1)
 
 def get_short_path_name(long_name):
-    """Convert a long path to its 8.3 short path equivalent"""
-    try:
-        # Pre-allocate buffer for the short path
-        buffer = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
-        # Get the short path
-        if windll.kernel32.GetShortPathNameW(long_name, buffer, wintypes.MAX_PATH) > 0:
-            return buffer.value
-        return long_name  # Return original if conversion fails
-    except Exception as e:
-        print(f"Error converting path: {e}")
-        return long_name
+    """Get short path name, with cross-platform fallback"""
+    if sys.platform == "win32":
+        try:
+            buffer = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+            if windll.kernel32.GetShortPathNameW(long_name, buffer, wintypes.MAX_PATH) > 0:
+                return buffer.value
+        except Exception as e:
+            print(f"Error getting short path: {e}")
+    return long_name
 
 def safe_write_cache(cache_data):
     """Safely write cache to a temporary file first, then rename"""
-    temp_file = APP_CONFIG['cache_file'] + '.tmp'
+    temp_file = CACHE_FILE + '.tmp'
     try:
         # Write to temporary file first
         with open(temp_file, 'w', encoding='utf-8') as f:
@@ -67,11 +98,11 @@ def safe_write_cache(cache_data):
             os.fsync(f.fileno())
         
         # On Windows, we need to remove the target file first
-        if os.path.exists(APP_CONFIG['cache_file']):
-            os.remove(APP_CONFIG['cache_file'])
+        if os.path.exists(CACHE_FILE):
+            os.remove(CACHE_FILE)
         
         # Rename temp file to actual cache file
-        os.rename(temp_file, APP_CONFIG['cache_file'])
+        os.rename(temp_file, CACHE_FILE)
         return True
     except Exception as e:
         print(f"Error saving cache: {e}")
@@ -126,7 +157,7 @@ class LoadingOverlay(QWidget):
 class ImageCell(QWidget):
     def __init__(self, image_path, cell_size, fast_load=False, parent=None):
         super().__init__(parent)
-        self.image_path = image_path.replace('/', '\\')  # Normalize path for Windows
+        self.image_path = os.path.normpath(image_path)  # Normalize path for multiplatform support
         self.short_path = None  # Will be set when needed
         self.cell_size = cell_size
         self.selected = False
@@ -145,8 +176,9 @@ class ImageCell(QWidget):
         
     def get_exiftool_path(self):
         """Get the appropriate path for ExifTool operations"""
-        if not self.short_path and any(ord(c) > 127 for c in self.image_path):
-            self.short_path = get_short_path_name(self.image_path)
+        if sys.platform == "win32" and not self.short_path:
+            if any(ord(c) > 127 for c in self.image_path):
+                self.short_path = get_short_path_name(self.image_path)
         return self.short_path if self.short_path else self.image_path
 
     def update_background(self):
@@ -174,14 +206,18 @@ class ImageCell(QWidget):
     def read_tag_metadata(self):
         """Read tag metadata using exiftool"""
         try:
+            field = get_metadata_field(self.image_path)
+            if not field:
+                print(f"Unsupported file format: {self.image_path}")
+                return ""
+                
             result = subprocess.run(
-                ['exiftool', '-XMP:Description', '-b', self.get_exiftool_path()], 
+                ['exiftool', field, '-b', self.get_exiftool_path()], 
                 capture_output=True, text=True, check=True,
                 encoding='utf-8'
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
-            # ExifTool returned non-zero exit status
             print(f"ExifTool error for {self.image_path}: {e.stderr}")
             return ""
         except Exception as e:
@@ -191,9 +227,14 @@ class ImageCell(QWidget):
     def write_tag_metadata(self, tag_text):
         """Write tag metadata using exiftool"""
         try:
-            # ExifTool command to write XMP:Description
+            field = get_metadata_field(self.image_path)
+            if not field:
+                print(f"Unsupported file format: {self.image_path}")
+                return False
+                
+            # ExifTool command to write metadata
             result = subprocess.run(
-                ['exiftool', f'-XMP:Description={tag_text}', '-overwrite_original', self.get_exiftool_path()],
+                ['exiftool', f'{field}={tag_text}', '-overwrite_original', self.get_exiftool_path()],
                 capture_output=True, text=True, check=False
             )
             
@@ -596,27 +637,29 @@ class ImageGallery(QMainWindow):
         # Clear existing grid
         self.clear_grid()
         
-        # Get all PNG files in the folder
-        png_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) 
-                    if f.lower().endswith('.png')]
+        # Get all supported image files in the folder
+        image_files = []
+        for filename in os.listdir(folder_path):
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in SUPPORTED_EXTENSIONS:
+                image_files.append(os.path.join(folder_path, filename))
         
-        if not png_files:
-            QMessageBox.information(self, "No Images", "No PNG images found in the selected folder.")
+        if not image_files:
+            QMessageBox.information(self, "No Images", 
+                f"No supported images found in the selected folder.\nSupported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
             return
-        
+
         # Sort files by name initially using natural sort
-        png_files.sort(key=natural_sort_key)
+        image_files.sort(key=natural_sort_key)
         
         # Try to load from cache if it exists and we're in fast load mode
         cached_tags = {}
         if self.fast_load:
             try:
-                if os.path.exists(APP_CONFIG['cache_file']):
+                if os.path.exists(CACHE_FILE):
                     try:
-                        # Read entire file first
-                        with open(APP_CONFIG['cache_file'], 'r', encoding='utf-8') as f:
+                        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                             content = f.read()
-                        # Then parse the JSON
                         cached_tags = json.loads(content)
                     except json.JSONDecodeError:
                         print("Cache file is corrupted")
@@ -640,8 +683,8 @@ class ImageGallery(QMainWindow):
         QApplication.processEvents()
         
         # Create cells with progress update
-        total_files = len(png_files)
-        for i, image_path in enumerate(png_files, 1):
+        total_files = len(image_files)
+        for i, image_path in enumerate(image_files, 1):
             cell = ImageCell(image_path, self.cell_size, fast_load=self.fast_load)
             
             # If we have cached tags, use them instead of reading from file
@@ -662,9 +705,9 @@ class ImageGallery(QMainWindow):
         self.loading_overlay.hide()
         
         # Delete cache file after loading
-        if os.path.exists(APP_CONFIG['cache_file']):
+        if os.path.exists(CACHE_FILE):
             try:
-                os.remove(APP_CONFIG['cache_file'])
+                os.remove(CACHE_FILE)
             except:
                 pass
         
@@ -687,7 +730,7 @@ class ImageGallery(QMainWindow):
         time.sleep(0.1)
         
         # Restart the application with fast load flag
-        python_exe = r'C:/Python311/python.exe'
+        python_exe = sys.executable  # Instead of r'C:/Python311/python.exe'
         script_path = os.path.abspath(__file__)
         self.close()
         subprocess.Popen([python_exe, script_path, "--fast-load"])
@@ -1006,7 +1049,7 @@ class ImageGallery(QMainWindow):
                         if rel_path == '.':
                             short_path = '.'
                         else:
-                            short_path = './' + rel_path.replace('\\', '/')
+                            short_path = './' + rel_path.replace(os.path.sep, '/')
                     except ValueError:
                         # If relpath fails (different drives etc), use full path
                         short_path = full_filepath
