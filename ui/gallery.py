@@ -1,6 +1,25 @@
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QGridLayout, 
+                            QLabel, QScrollArea, QInputDialog, QMessageBox, 
+                            QFileDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
+                            QShortcut, QComboBox, QDialog, QFrame, QMenu)
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QTimer
+import os, subprocess, sys
+
+from components.image_cell import ImageCell
+from components.loading import LoadingOverlay
+from components.image_popup import ImageDetailsPopup
+from core.cache import CacheManager
+from core.metadata import get_metadata_field
+from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
+from utils.helpers import natural_sort_key, parse_tags
+
 class ImageGallery(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Initialize cache manager
+        self.cache_manager = CacheManager()
         
         # Configuration
         self.cell_size = 150  # Size of each cell in the grid
@@ -10,6 +29,7 @@ class ImageGallery(QMainWindow):
         self.last_cell_position = None
         self.image_cells = []
         self.processed_cells = set()  # Track cells processed in current drag
+        self.current_folder = None  # Track current folder for cache purposes
         
         # Double click tracking
         self.last_click_pos = None
@@ -107,7 +127,7 @@ class ImageGallery(QMainWindow):
         self.loading_overlay = LoadingOverlay(self)
         
         # Initialize with default folder if set
-        if APP_CONFIG['default_folder']:
+        if hasattr(APP_CONFIG, 'default_folder') and APP_CONFIG['default_folder']:
             # Show window first
             self.show()
             self.activateWindow()
@@ -115,6 +135,17 @@ class ImageGallery(QMainWindow):
             QApplication.processEvents()  # Process pending events
             # Then load images
             self.load_images(APP_CONFIG['default_folder'])
+        
+        # Get reference to QApplication instance for aboutToQuit connection
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.aboutToQuit.connect(self.save_cache_on_exit)
+    
+    def save_cache_on_exit(self):
+        """Save cache data when application is closing"""
+        print("[Cache] Saving cache before exit")
+        self.cache_manager.save_cache()
     
     def clear_selections(self):
         """Clear all selected cells"""
@@ -209,32 +240,47 @@ class ImageGallery(QMainWindow):
             self.load_images(folder_path)
     
     def load_images(self, folder_path):
+        from core.metadata import SUPPORTED_EXTENSIONS
+        
+        self.current_folder = os.path.normpath(folder_path)
+        print(f"[Cache] Loading images from: {self.current_folder}")
+        
         # Clear existing grid
         self.clear_grid()
         
         # Get all supported image files in the folder
         image_files = []
         for filename in os.listdir(folder_path):
-            ext = os.path.splitext(filename)[1].lower()
-            if ext in SUPPORTED_EXTENSIONS:
-                image_files.append(os.path.join(folder_path, filename))
+            filepath = os.path.join(folder_path, filename)
+            if os.path.isfile(filepath):
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in SUPPORTED_EXTENSIONS:
+                    image_files.append(filepath)
         
         if not image_files:
             QMessageBox.information(self, "No Images", 
                 f"No supported images found in the selected folder.\nSupported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
             return
 
+        # Get list of cached files in this directory
+        cached_files = set(self.cache_manager.get_cached_files_in_dir(self.current_folder))
+        print(f"[Cache] Found {len(cached_files)} cached files in this directory")
+        
         # Sort files by name initially using natural sort
         image_files.sort(key=natural_sort_key)
         
         # Show loading overlay
         self.loading_overlay.show()
+        from PyQt5.QtWidgets import QApplication
         QApplication.processEvents()
         
         # Create cells with progress update
         total_files = len(image_files)
         for i, image_path in enumerate(image_files, 1):
-            cell = ImageCell(image_path, self.cell_size)
+            norm_path = os.path.normpath(image_path)
+            
+            # Create cell with cache manager
+            cell = ImageCell(image_path, self.cell_size, self.cache_manager)
             self.image_cells.append(cell)
             
             if i % 5 == 0:
@@ -247,6 +293,12 @@ class ImageGallery(QMainWindow):
         # Hide loading overlay
         self.loading_overlay.hide()
         
+        # Clean cache of files that no longer exist
+        self.cache_manager.clean_missing_files()
+        
+        # Save updated cache
+        self.cache_manager.save_cache()
+        
         # Activate window to gain focus
         self.activateWindow()
         self.raise_()
@@ -255,17 +307,24 @@ class ImageGallery(QMainWindow):
         """Re-read metadata for all images in the grid"""
         # Show loading overlay
         self.loading_overlay.show()
+        from PyQt5.QtWidgets import QApplication
         QApplication.processEvents()
         
         total = len(self.image_cells)
         for i, cell in enumerate(self.image_cells, 1):
             cell.tag_text = cell.read_tag_metadata()
+            # Update cache with the new tag data
+            self.cache_manager.update_cache(cell.image_path, cell.tag_text)
             cell.update_background()
             cell.update()
             
             if i % 5 == 0:
                 self.loading_overlay.update_progress(i, total)
                 QApplication.processEvents()
+        
+        # Save updated cache after full refresh
+        self.cache_manager.save_cache()
+        print("[Cache] Cache updated after full metadata refresh")
         
         self.loading_overlay.hide()
     
@@ -506,7 +565,7 @@ class ImageGallery(QMainWindow):
                 col = 0
                 row += 1
 
-    def export_lists(self, skip_refresh):
+    def export_lists(self, skip_refresh=True):
         """Export lists based on EXPORT_PATHS configuration"""
         if not self.image_cells:
             QMessageBox.information(self, "No Images", "No images loaded to export.")
@@ -515,6 +574,7 @@ class ImageGallery(QMainWindow):
         # Refresh metadata if needed
         if not skip_refresh:
             self.loading_overlay.show()
+            from PyQt5.QtWidgets import QApplication
             QApplication.processEvents()
             
             total = len(self.image_cells)

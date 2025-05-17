@@ -1,11 +1,33 @@
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap, QImage
+from PyQt5.QtCore import Qt, QRect
+import os
+
+from core.metadata import get_metadata_field, read_tag_metadata, write_tag_metadata, get_short_path_name
+
 class ImageCell(QWidget):
-    def __init__(self, image_path, cell_size, parent=None):
+    def __init__(self, image_path, cell_size, cache_manager=None, parent=None):
         super().__init__(parent)
         self.image_path = os.path.normpath(image_path)  # Normalize path for multiplatform support
         self.short_path = None  # Will be set when needed
         self.cell_size = cell_size
+        self.cache_manager = cache_manager
         self.selected = False
-        self.tag_text = self.read_tag_metadata()
+        
+        # Try to get tag from cache first
+        cached_tags = None
+        if self.cache_manager:
+            cached_tags = self.cache_manager.get_cached_metadata(self.image_path)
+        
+        if cached_tags is not None:
+            self.tag_text = cached_tags
+            print(f"[Cache] Using cached tags for {os.path.basename(self.image_path)}")
+        else:
+            self.tag_text = self.read_tag_metadata()
+            # Update cache with the new tag data
+            if self.cache_manager:
+                self.cache_manager.update_cache(self.image_path, self.tag_text)
+                
         self.setFixedSize(cell_size, cell_size)
         self.setMouseTracking(True)
         
@@ -21,11 +43,12 @@ class ImageCell(QWidget):
         # Enable context menu
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
-        
+    
     def get_exiftool_path(self):
         """Get the appropriate path for ExifTool operations"""
-        if sys.platform == "win32" and not self.short_path:
-            if any(ord(c) > 127 for c in self.image_path):
+        if not self.short_path:
+            import sys
+            if sys.platform == "win32" and any(ord(c) > 127 for c in self.image_path):
                 self.short_path = get_short_path_name(self.image_path)
         return self.short_path if self.short_path else self.image_path
 
@@ -52,51 +75,21 @@ class ImageCell(QWidget):
             self.pixmap.fill(Qt.lightGray)
     
     def read_tag_metadata(self):
-        """Read tag metadata using exiftool"""
-        try:
-            field = get_metadata_field(self.image_path)
-            if not field:
-                print(f"Unsupported file format: {self.image_path}")
-                return ""
-                
-            result = subprocess.run(
-                ['exiftool', field, '-b', self.get_exiftool_path()], 
-                capture_output=True, text=True, check=True,
-                encoding='utf-8'
-            )
-            return result.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            print(f"ExifTool error for {self.image_path}: {e.stderr}")
-            return ""
-        except Exception as e:
-            print(f"Error reading metadata from {self.image_path}: {e}")
-            return ""
+        """Read tag metadata from the image file"""
+        return read_tag_metadata(self.image_path, self.get_exiftool_path())
 
     def write_tag_metadata(self, tag_text):
-        """Write tag metadata using exiftool"""
-        try:
-            field = get_metadata_field(self.image_path)
-            if not field:
-                print(f"Unsupported file format: {self.image_path}")
-                return False
-                
-            # ExifTool command to write metadata
-            result = subprocess.run(
-                ['exiftool', f'{field}={tag_text}', '-overwrite_original', self.get_exiftool_path()],
-                capture_output=True, text=True, check=False
-            )
-            
-            if result.returncode == 0:
-                self.tag_text = tag_text
-                self.update_background()
-                self.update()
-                return True
-            else:
-                print(f"ExifTool error: {result.stderr}")
-                return False
-        except Exception as e:
-            print(f"Error writing metadata to {self.image_path}: {e}")
-            return False
+        """Write tag metadata to the image file"""
+        success = write_tag_metadata(self.image_path, tag_text, self.get_exiftool_path())
+        if success:
+            self.tag_text = tag_text
+            # Update cache with the new tag data
+            if hasattr(self, 'cache_manager') and self.cache_manager:
+                self.cache_manager.update_cache(self.image_path, tag_text)
+                print(f"[Cache] Updated cache for {os.path.basename(self.image_path)}")
+            self.update_background()
+            self.update()
+        return success
     
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -152,6 +145,8 @@ class ImageCell(QWidget):
 
     def show_context_menu(self, position):
         """Show context menu for cell"""
+        from PyQt5.QtWidgets import QMenu, QMessageBox
+        
         # Get parent ImageGallery window
         gallery = self.window()
         
@@ -174,6 +169,10 @@ class ImageCell(QWidget):
                     new_tags = cell.read_tag_metadata()
                     if new_tags != cell.tag_text:
                         cell.tag_text = new_tags
+                        # Update cache with the new tag data
+                        if hasattr(cell, 'cache_manager') and cell.cache_manager:
+                            cell.cache_manager.update_cache(cell.image_path, new_tags)
+                            print(f"[Cache] Updated cache for {os.path.basename(cell.image_path)}")
                         cell.update_background()
                         cell.update()
                 except Exception as e:
@@ -190,10 +189,15 @@ class ImageCell(QWidget):
             new_tags = self.read_tag_metadata()
             if new_tags != self.tag_text:
                 self.tag_text = new_tags
+                # Update cache with the new tag data
+                if hasattr(self, 'cache_manager') and self.cache_manager:
+                    self.cache_manager.update_cache(self.image_path, new_tags)
+                    print(f"[Cache] Updated cache for {os.path.basename(self.image_path)}")
                 self.update_background()
                 self.update()
         except Exception as e:
             print(f"Error refreshing tags for {self.image_path}: {e}")
+            from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(
                 self, 
                 "Refresh Error",

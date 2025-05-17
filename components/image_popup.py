@@ -1,3 +1,8 @@
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel, QFrame
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt, QSize
+import os
+
 class ImageDetailsPopup(QWidget):
     def __init__(self, parent=None, image_path="", tag_text="", position=None, on_tags_updated=None):
         super().__init__(parent, Qt.Window)
@@ -61,6 +66,7 @@ class ImageDetailsPopup(QWidget):
         
         # Position the popup within screen bounds
         if position:
+            from PyQt5.QtWidgets import QApplication
             screen = QApplication.screenAt(position)
             if not screen:
                 screen = QApplication.primaryScreen()
@@ -98,6 +104,7 @@ class ImageDetailsPopup(QWidget):
     
     def mouseMoveEvent(self, event):
         if self.dragging and event.buttons() & Qt.LeftButton:
+            from PyQt5.QtWidgets import QApplication
             new_pos = event.globalPos() - self.drag_position
             
             # Keep popup within screen bounds
