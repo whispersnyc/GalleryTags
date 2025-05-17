@@ -3,13 +3,11 @@ import os
 import re
 import shutil
 import ctypes
-import json
-import time
 from ctypes import wintypes, windll
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, 
                             QLabel, QScrollArea, QInputDialog, QMessageBox, 
                             QFileDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit,
-                            QShortcut, QComboBox, QDialog, QFrame)
+                            QShortcut, QComboBox, QDialog, QFrame, QMenu)
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QTimer
 from PIL import Image
@@ -19,7 +17,7 @@ import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import subprocess
 from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
-# config.APP_CONFIG = {"default_folder":path_str, "cache_file":path_str}
+# config.APP_CONFIG = {"default_folder":path_str}
 # config.EXPORT_PATHS = {file_path_str: tags_str ("& tag1, tag2" means AND while '|' prefix means OR, default AND)}
 # config.EXPORT_CONFIG = {'heading': heading_str, 'item_format': "![$fn]($fp/$fn.$fe)\n", "group_by": 5}
 
@@ -33,34 +31,6 @@ FORMAT_CONFIG = {
 # Helper to get all supported extensions
 SUPPORTED_EXTENSIONS = [ext for format_info in FORMAT_CONFIG.values() 
                        for ext in format_info['extensions']]
-
-# Platform-specific app data directory
-def get_app_cache_dir():
-    """Get platform-specific cache directory for the application"""
-    app_name = "GalleryTags"
-    if sys.platform == "win32":
-        base_dir = os.environ.get("LOCALAPPDATA")
-        if not base_dir:
-            base_dir = os.path.expanduser("~")
-        cache_dir = os.path.join(base_dir, app_name, "cache")
-    elif sys.platform == "darwin":
-        cache_dir = os.path.expanduser(f"~/Library/Caches/{app_name}")
-    else:  # Linux and other Unix
-        cache_dir = os.path.expanduser(f"~/.cache/{app_name}")
-    
-    os.makedirs(cache_dir, exist_ok=True)
-    return cache_dir
-
-# Set up cache file path
-CACHE_FILE = os.path.join(get_app_cache_dir(), "tags_cache.json")
-
-# Helper to get metadata field for a file
-def get_metadata_field(file_path):
-    ext = os.path.splitext(file_path)[1].lower()
-    for format_info in FORMAT_CONFIG.values():
-        if ext in format_info['extensions']:
-            return format_info['field']
-    return None
 
 def natural_sort_key(s):
     parts = re.split('([0-9]+)', os.path.basename(s))
@@ -87,32 +57,13 @@ def get_short_path_name(long_name):
             print(f"Error getting short path: {e}")
     return long_name
 
-def safe_write_cache(cache_data):
-    """Safely write cache to a temporary file first, then rename"""
-    temp_file = CACHE_FILE + '.tmp'
-    try:
-        # Write to temporary file first
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            json.dump(cache_data, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        
-        # On Windows, we need to remove the target file first
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
-        
-        # Rename temp file to actual cache file
-        os.rename(temp_file, CACHE_FILE)
-        return True
-    except Exception as e:
-        print(f"Error saving cache: {e}")
-        # Clean up temp file if it exists
-        if os.path.exists(temp_file):
-            try:
-                os.remove(temp_file)
-            except:
-                pass
-        return False
+# Helper to get metadata field for a file
+def get_metadata_field(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    for format_info in FORMAT_CONFIG.values():
+        if ext in format_info['extensions']:
+            return format_info['field']
+    return None
 
 def parse_tags(tag_string):
     """Helper function to parse tag string into a set of cleaned tags"""
@@ -155,13 +106,13 @@ class LoadingOverlay(QWidget):
         self.setFixedSize(self.parent().size())
 
 class ImageCell(QWidget):
-    def __init__(self, image_path, cell_size, fast_load=False, parent=None):
+    def __init__(self, image_path, cell_size, parent=None):
         super().__init__(parent)
         self.image_path = os.path.normpath(image_path)  # Normalize path for multiplatform support
         self.short_path = None  # Will be set when needed
         self.cell_size = cell_size
         self.selected = False
-        self.tag_text = "" if fast_load else self.read_tag_metadata()
+        self.tag_text = self.read_tag_metadata()
         self.setFixedSize(cell_size, cell_size)
         self.setMouseTracking(True)
         
@@ -173,6 +124,10 @@ class ImageCell(QWidget):
         
         # Set different background color based on tag status
         self.update_background()
+
+        # Enable context menu
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
         
     def get_exiftool_path(self):
         """Get the appropriate path for ExifTool operations"""
@@ -249,7 +204,6 @@ class ImageCell(QWidget):
         except Exception as e:
             print(f"Error writing metadata to {self.image_path}: {e}")
             return False
-
     
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -303,7 +257,30 @@ class ImageCell(QWidget):
             self.selected = selected
             self.update()
 
-
+    def show_context_menu(self, position):
+        """Show context menu for cell"""
+        menu = QMenu(self)
+        refresh_action = menu.addAction("Refresh Tags")
+        action = menu.exec_(self.mapToGlobal(position))
+        
+        if action == refresh_action:
+            self.refresh_single()
+    
+    def refresh_single(self):
+        """Refresh tags for this cell only"""
+        try:
+            new_tags = self.read_tag_metadata()
+            if new_tags != self.tag_text:
+                self.tag_text = new_tags
+                self.update_background()
+                self.update()
+        except Exception as e:
+            print(f"Error refreshing tags for {self.image_path}: {e}")
+            QMessageBox.warning(
+                self, 
+                "Refresh Error",
+                f"Error refreshing tags for {os.path.basename(self.image_path)}:\n{str(e)}"
+            )
 
 class ImageDetailsPopup(QWidget):
     def __init__(self, parent=None, image_path="", tag_text="", position=None, on_tags_updated=None):
@@ -423,12 +400,9 @@ class ImageDetailsPopup(QWidget):
             self.move(x, y)
 
 class ImageGallery(QMainWindow):
-    def __init__(self, fast_load=False):
+    def __init__(self):
         super().__init__()
         
-        # Track if we've already shown fast load error
-        self.fast_load_error_shown = False
-
         # Configuration
         self.cell_size = 150  # Size of each cell in the grid
         self.grid_spacing = 10  # Spacing between cells
@@ -437,7 +411,6 @@ class ImageGallery(QMainWindow):
         self.last_cell_position = None
         self.image_cells = []
         self.processed_cells = set()  # Track cells processed in current drag
-        self.fast_load = fast_load
         
         # Double click tracking
         self.last_click_pos = None
@@ -511,7 +484,6 @@ class ImageGallery(QMainWindow):
         QShortcut(Qt.CTRL + Qt.Key_O, self, self.open_folder)
         QShortcut(Qt.CTRL + Qt.Key_A, self, self.select_all)
         QShortcut(Qt.CTRL + Qt.Key_R, self, self.refresh_metadata)
-        QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_R, self, self.cache_and_reload)
         QShortcut(Qt.CTRL + Qt.Key_F, self, self.focus_search)
         QShortcut(Qt.CTRL + Qt.Key_E, self, lambda: self.export_lists(True))
         QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_E, self, lambda: self.export_lists(False))
@@ -562,7 +534,6 @@ class ImageGallery(QMainWindow):
     
     def delayed_resize_update(self):
         self.update_grid_layout()
-    
     
     def update_grid_layout(self):
         if not self.image_cells:
@@ -627,7 +598,6 @@ class ImageGallery(QMainWindow):
         # Keep focus on search input
         self.search_input.setFocus()
     
-
     def open_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder_path:
@@ -652,32 +622,6 @@ class ImageGallery(QMainWindow):
         # Sort files by name initially using natural sort
         image_files.sort(key=natural_sort_key)
         
-        # Try to load from cache if it exists and we're in fast load mode
-        cached_tags = {}
-        if self.fast_load:
-            try:
-                if os.path.exists(CACHE_FILE):
-                    try:
-                        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        cached_tags = json.loads(content)
-                    except json.JSONDecodeError:
-                        print("Cache file is corrupted")
-                        self.fast_load = False
-                else:
-                    if not self.fast_load_error_shown:
-                        QMessageBox.warning(self, "Cache Missing", 
-                            "Fast load was requested but cache file is missing.\nFalling back to normal load.")
-                        self.fast_load_error_shown = True
-                    self.fast_load = False
-            except Exception as e:
-                print(f"Error loading cache: {e}")
-                if not self.fast_load_error_shown:
-                    QMessageBox.warning(self, "Cache Error", 
-                        "Failed to load cache file.\nFalling back to normal load.")
-                    self.fast_load_error_shown = True
-                self.fast_load = False
-        
         # Show loading overlay
         self.loading_overlay.show()
         QApplication.processEvents()
@@ -685,13 +629,7 @@ class ImageGallery(QMainWindow):
         # Create cells with progress update
         total_files = len(image_files)
         for i, image_path in enumerate(image_files, 1):
-            cell = ImageCell(image_path, self.cell_size, fast_load=self.fast_load)
-            
-            # If we have cached tags, use them instead of reading from file
-            if cached_tags and image_path in cached_tags:
-                cell.tag_text = cached_tags[image_path]
-                cell.update_background()
-            
+            cell = ImageCell(image_path, self.cell_size)
             self.image_cells.append(cell)
             
             if i % 5 == 0:
@@ -704,44 +642,12 @@ class ImageGallery(QMainWindow):
         # Hide loading overlay
         self.loading_overlay.hide()
         
-        # Delete cache file after loading
-        if os.path.exists(CACHE_FILE):
-            try:
-                os.remove(CACHE_FILE)
-            except:
-                pass
-        
         # Activate window to gain focus
         self.activateWindow()
         self.raise_()
     
-    def cache_and_reload(self):
-        """Cache current tags and reload the application in fast load mode"""
-        cache_data = {}
-        for cell in self.image_cells:
-            if cell.tag_text:  # Only cache non-empty tags
-                cache_data[cell.image_path] = cell.tag_text
-        
-        if not safe_write_cache(cache_data):
-            QMessageBox.critical(self, "Error", "Failed to save cache file.")
-            return
-        
-        # Small delay to ensure file operations are complete
-        time.sleep(0.1)
-        
-        # Restart the application with fast load flag
-        python_exe = sys.executable  # Instead of r'C:/Python311/python.exe'
-        script_path = os.path.abspath(__file__)
-        self.close()
-        subprocess.Popen([python_exe, script_path, "--fast-load"])
-        sys.exit(0)
-
     def refresh_metadata(self):
         """Re-read metadata for all images in the grid"""
-        # If in fast load mode, switch back to normal mode
-        if self.fast_load:
-            self.fast_load = False
-        
         # Show loading overlay
         self.loading_overlay.show()
         QApplication.processEvents()
@@ -1088,9 +994,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     check_exiftool()
     
-    # Check for fast load argument
-    fast_load = "--fast-load" in sys.argv
-    
-    window = ImageGallery(fast_load)
+    window = ImageGallery()
     window.show()
     sys.exit(app.exec_())
