@@ -1,5 +1,30 @@
 # Application Configuration
+
+
 APP_CONFIG = {
-    'default_folder': r'D:\Pictures',
-    'cache_file': r'C:\Users\user\.cache\.tag_cache.json',
+    'default_folder': 'D:/Pictures',
+    'cache_file': 'C:/Users/user/.cache/.tag_cache.json',
+}
+
+
+# ---
+
+
+# Export Configuration
+
+
+# "& tag1, tag2" means AND while '| tag1, tag2' means OR, default AND
+
+EXPORT_PATHS = {
+    "D:/Pictures/index.md": "| art, screenshots"
+}
+
+# item_format: $fn is filename (no extension), $fe is file extension, $fp is shortest file path, $ffp is full file path
+# ex. $fp/$fn.$fe = ./screenshot.png (index.md above is in same folder as screenshot.png)
+# ex. $ffp/$fn.$fe = D:/Pictures/screenshot.png
+
+EXPORT_CONFIG = {
+    'heading': "---\ncssclasses: fullwidth\n---\n",
+    'item_format': "![$fn]($fp/$fn.$fe)\n",
+    'group_by': 0,
 }

@@ -18,9 +18,10 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import subprocess
-from config import APP_CONFIG, EXPORT_PATHS
+from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
 # config.APP_CONFIG = {"default_folder":path_str, "cache_file":path_str}
 # config.EXPORT_PATHS = {file_path_str: tags_str ("& tag1, tag2" means AND while '|' prefix means OR, default AND)}
+# config.EXPORT_CONFIG = {'heading': heading_str, 'item_format': "![$fn]($fp/$fn.$fe)\n", "group_by": 5}
 
 # Metadata Field Configuration
 TAG_METADATA_CONFIG = {
@@ -412,7 +413,7 @@ class ImageGallery(QMainWindow):
         self.current_sort = "Name (ascending)"
         
         # UI setup
-        self.setWindowTitle("PNG Gallery with Tag Editor")
+        self.setWindowTitle("GalleryTags - Image Gallery with Tag Editor")
         self.setGeometry(100, 100, 800, 600)
         
         # Create central widget
@@ -442,6 +443,11 @@ class ImageGallery(QMainWindow):
         self.apply_tag_button.clicked.connect(self.apply_tag_to_selected)
         button_layout.addWidget(self.apply_tag_button)
         
+        # Add export button
+        self.export_button = QPushButton("Export (Ctrl+E)")
+        self.export_button.clicked.connect(lambda: self.export_lists(True))
+        button_layout.addWidget(self.export_button)
+        
         # Add sort dropdown
         self.sort_combo = QComboBox()
         self.sort_combo.addItems(self.sort_options)
@@ -466,6 +472,8 @@ class ImageGallery(QMainWindow):
         QShortcut(Qt.CTRL + Qt.Key_R, self, self.refresh_metadata)
         QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_R, self, self.cache_and_reload)
         QShortcut(Qt.CTRL + Qt.Key_F, self, self.focus_search)
+        QShortcut(Qt.CTRL + Qt.Key_E, self, lambda: self.export_lists(True))
+        QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_E, self, lambda: self.export_lists(False))
         
         main_layout.addLayout(button_layout)
         
@@ -928,7 +936,106 @@ class ImageGallery(QMainWindow):
                 col = 0
                 row += 1
 
-    
+    def export_lists(self, skip_refresh):
+        """Export lists based on EXPORT_PATHS configuration"""
+        if not self.image_cells:
+            QMessageBox.information(self, "No Images", "No images loaded to export.")
+            return
+
+        # Refresh metadata if needed
+        if not skip_refresh:
+            self.loading_overlay.show()
+            QApplication.processEvents()
+            
+            total = len(self.image_cells)
+            for i, cell in enumerate(self.image_cells, 1):
+                cell.tag_text = cell.read_tag_metadata()
+                if i % 5 == 0:
+                    self.loading_overlay.update_progress(i, total)
+                    QApplication.processEvents()
+            
+            self.loading_overlay.hide()
+
+        # Get group size from config
+        group_size = EXPORT_CONFIG.get('group_by', 0)
+
+        # Process each export path
+        for file_path, tags_str in EXPORT_PATHS.items():
+            try:
+                # Determine search mode and clean tags string
+                tags_str = tags_str.strip()
+                is_or_mode = tags_str.startswith('|')
+                # Remove prefix if exists
+                if tags_str.startswith('|') or tags_str.startswith('&'):
+                    tags_str = tags_str[1:].strip()
+                
+                # Parse the tags using helper function
+                required_tags = parse_tags(tags_str)
+        
+                # Filter images based on tags
+                matched_images = []
+                for cell in self.image_cells:
+                    cell_tags = parse_tags(cell.tag_text)
+                    
+                    if is_or_mode:
+                        # OR mode: any required tag must be present
+                        if any(tag in cell_tags for tag in required_tags):
+                            matched_images.append(cell.image_path)
+                    else:
+                        # AND mode (default): all required tags must be present
+                        if all(tag in cell_tags for tag in required_tags):
+                            matched_images.append(cell.image_path)
+
+                # Generate export content
+                content = EXPORT_CONFIG['heading'] + '\n'
+                
+                # Get base directory of export file for path calculations
+                export_dir = os.path.dirname(os.path.abspath(file_path))
+                
+                # Process images with grouping
+                for i, img_path in enumerate(matched_images, 1):
+                    # Extract components
+                    filename = os.path.basename(img_path)
+                    filename_no_ext = os.path.splitext(filename)[0]
+                    file_ext = os.path.splitext(filename)[1][1:]  # Remove dot
+                    full_filepath = os.path.dirname(img_path)
+                    
+                    # Calculate relative path
+                    try:
+                        rel_path = os.path.relpath(full_filepath, export_dir)
+                        if rel_path == '.':
+                            short_path = '.'
+                        else:
+                            short_path = './' + rel_path.replace('\\', '/')
+                    except ValueError:
+                        # If relpath fails (different drives etc), use full path
+                        short_path = full_filepath
+                    
+                    # Format item string
+                    item = EXPORT_CONFIG['item_format']
+                    item = item.replace('$fn', filename_no_ext)
+                    item = item.replace('$fe', file_ext)
+                    item = item.replace('$fp', short_path)
+                    item = item.replace('$ffp', full_filepath)
+                    
+                    content += item
+                    
+                    # Add extra newline after each group
+                    if group_size > 0 and i % group_size == 0 and i < len(matched_images):
+                        content += '\n'
+
+                # Write to file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+            except Exception as e:
+                print(f"Error exporting to {file_path}: {e}")
+                QMessageBox.warning(self, "Export Error", 
+                    f"Error exporting to {file_path}:\n{str(e)}")
+
+        QMessageBox.information(self, "Export Complete", 
+            f"Successfully exported lists to {len(EXPORT_PATHS)} file(s).")
+
     def focus_search(self):
         """Focus the search input box"""
         self.search_input.setFocus()
