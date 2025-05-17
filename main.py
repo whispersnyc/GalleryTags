@@ -259,13 +259,38 @@ class ImageCell(QWidget):
 
     def show_context_menu(self, position):
         """Show context menu for cell"""
+        # Get parent ImageGallery window
+        gallery = self.window()
+        
+        # If no cells are selected, select this one
+        if not gallery.selected_cells:
+            gallery.selected_cells.clear()
+            for cell in gallery.image_cells:
+                cell.set_selected(False)
+            self.set_selected(True)
+            gallery.selected_cells.add(self)
+        
         menu = QMenu(self)
-        refresh_action = menu.addAction("Refresh Tags")
+        refresh_action = menu.addAction(f"Refresh Tags ({len(gallery.selected_cells)} selected)")
         action = menu.exec_(self.mapToGlobal(position))
         
         if action == refresh_action:
-            self.refresh_single()
-    
+            # Refresh all selected cells
+            for cell in gallery.selected_cells:
+                try:
+                    new_tags = cell.read_tag_metadata()
+                    if new_tags != cell.tag_text:
+                        cell.tag_text = new_tags
+                        cell.update_background()
+                        cell.update()
+                except Exception as e:
+                    print(f"Error refreshing tags for {cell.image_path}: {e}")
+                    QMessageBox.warning(
+                        self, 
+                        "Refresh Error",
+                        f"Error refreshing tags for {os.path.basename(cell.image_path)}:\n{str(e)}"
+                    )
+
     def refresh_single(self):
         """Refresh tags for this cell only"""
         try:
@@ -517,6 +542,12 @@ class ImageGallery(QMainWindow):
             # Then load images
             self.load_images(APP_CONFIG['default_folder'])
     
+    def clear_selections(self):
+        """Clear all selected cells"""
+        self.selected_cells.clear()
+        for cell in self.image_cells:
+            cell.set_selected(False)
+    
     def resizeEvent(self, event):
         super().resizeEvent(event)
         
@@ -689,11 +720,22 @@ class ImageGallery(QMainWindow):
                 # Handle as double click
                 cell = self.get_cell_at_position(current_pos)
                 if cell:
+                    # Clear all selections first
+                    self.selected_cells.clear()
+                    for other_cell in self.image_cells:
+                        other_cell.set_selected(False)
+                    
+                    # Select only the double-clicked cell
+                    cell.set_selected(True)
+                    self.selected_cells.add(cell)
+                    
                     def on_tags_updated(new_tags):
                         if cell.write_tag_metadata(new_tags):
                             cell.tag_text = new_tags
                             cell.update_background()
                             cell.update()
+                            # Clear selections after successful update
+                            self.clear_selections()
                     
                     popup = ImageDetailsPopup(
                         parent=self,
@@ -762,8 +804,10 @@ class ImageGallery(QMainWindow):
         return None
     
     def keyPressEvent(self, event):
-        # Modify to prevent Enter key from triggering tag application when search is focused
-        if (event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter) and \
+        if event.key() == Qt.Key_Escape:
+            self.clear_selections()
+        # Handle Enter as before
+        elif (event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter) and \
            not self.search_input.hasFocus():
             self.apply_tag_to_selected()
         else:
@@ -813,6 +857,9 @@ class ImageGallery(QMainWindow):
                     
                     if cell.write_tag_metadata(new_tags):
                         success_count += 1
+                
+                # Clear selections after successful operation
+                self.clear_selections()
                 
                 QMessageBox.information(
                     self, 
