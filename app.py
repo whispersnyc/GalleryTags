@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# Main entry point for the application
-
 import sys
 from PyQt5.QtWidgets import QApplication
 from ui.gallery import ImageGallery

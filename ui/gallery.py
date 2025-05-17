@@ -68,9 +68,14 @@ class ImageGallery(QMainWindow):
         self.select_all_button.clicked.connect(self.select_all)
         button_layout.addWidget(self.select_all_button)
         
-        self.refresh_button = QPushButton("Refresh Metadata (Ctrl+R)")
+        self.refresh_button = QPushButton("Full Rescan")
         self.refresh_button.clicked.connect(self.refresh_metadata)
         button_layout.addWidget(self.refresh_button)
+        
+        # Add Quick Refresh button
+        self.quick_refresh_button = QPushButton("Quick Refresh (Ctrl + R)")
+        self.quick_refresh_button.clicked.connect(self.quick_refresh)
+        button_layout.addWidget(self.quick_refresh_button)
         
         self.apply_tag_button = QPushButton("Add Tag (Enter)")
         self.apply_tag_button.clicked.connect(self.apply_tag_to_selected)
@@ -102,7 +107,8 @@ class ImageGallery(QMainWindow):
         # Add keyboard shortcuts
         QShortcut(Qt.CTRL + Qt.Key_O, self, self.open_folder)
         QShortcut(Qt.CTRL + Qt.Key_A, self, self.select_all)
-        QShortcut(Qt.CTRL + Qt.Key_R, self, self.refresh_metadata)
+        QShortcut(Qt.CTRL + Qt.Key_R, self, self.quick_refresh)
+        QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_R, self, self.refresh_metadata)
         QShortcut(Qt.CTRL + Qt.Key_F, self, self.focus_search)
         QShortcut(Qt.CTRL + Qt.Key_E, self, lambda: self.export_lists(True))
         QShortcut(Qt.CTRL + Qt.SHIFT + Qt.Key_E, self, lambda: self.export_lists(False))
@@ -328,6 +334,61 @@ class ImageGallery(QMainWindow):
         
         self.loading_overlay.hide()
     
+    def quick_refresh(self):
+        """Quick refresh only for modified or new files"""
+        if not self.image_cells:
+            return
+            
+        # Show loading overlay
+        self.loading_overlay.show()
+        from PyQt5.QtWidgets import QApplication
+        QApplication.processEvents()
+        
+        # Track which cells need updating
+        cells_to_update = []
+        
+        # Check each cell
+        total = len(self.image_cells)
+        for i, cell in enumerate(self.image_cells, 1):
+            try:
+                # Get last modified time
+                mtime = os.path.getmtime(cell.image_path)
+                cached_mtime = self.cache_manager.get_mtime(cell.image_path)
+                
+                # Check if file needs update
+                if cached_mtime is None or abs(mtime - cached_mtime) > 3:
+                    cells_to_update.append(cell)
+                
+                if i % 5 == 0:
+                    self.loading_overlay.update_progress(i, total)
+                    QApplication.processEvents()
+                    
+            except Exception as e:
+                print(f"Error checking file {cell.image_path}: {e}")
+        
+        # Update only modified files
+        total_updates = len(cells_to_update)
+        for i, cell in enumerate(cells_to_update, 1):
+            try:
+                cell.tag_text = cell.read_tag_metadata()
+                self.cache_manager.update_cache(cell.image_path, cell.tag_text)
+                cell.update_background()
+                cell.update()
+                
+                if i % 5 == 0:
+                    self.loading_overlay.update_progress(i, total_updates)
+                    QApplication.processEvents()
+                    
+            except Exception as e:
+                print(f"Error updating file {cell.image_path}: {e}")
+        
+        # Save cache if any updates were made
+        if cells_to_update:
+            self.cache_manager.save_cache()
+            print(f"[Cache] Updated {len(cells_to_update)} modified files")
+        
+        self.loading_overlay.hide()
+    
     def clear_grid(self):
         # Clear selected cells
         self.selected_cells.clear()
@@ -365,6 +426,8 @@ class ImageGallery(QMainWindow):
                     def on_tags_updated(new_tags):
                         if cell.write_tag_metadata(new_tags):
                             cell.tag_text = new_tags
+                            # Update cache with new tags and current mtime
+                            self.cache_manager.update_cache(cell.image_path, new_tags)
                             cell.update_background()
                             cell.update()
                             # Clear selections after successful update
@@ -489,14 +552,18 @@ class ImageGallery(QMainWindow):
                     new_tags = f"{current_tags}, {tag_text}" if current_tags else tag_text
                     
                     if cell.write_tag_metadata(new_tags):
+                        cell.tag_text = new_tags
+                        # Update cache with new tags and current mtime
+                        self.cache_manager.update_cache(cell.image_path, new_tags)
+                        cell.update_background()
+                        cell.update()
                         success_count += 1
                 
                 # Clear selections after successful operation
                 self.clear_selections()
                 
-                QMessageBox.information(
-                    self, 
-                    "Tags Applied", 
+                print(
+                    "Tags Applied:", 
                     f"Successfully applied tags to {success_count} of {len(self.selected_cells)} images."
                 )
     

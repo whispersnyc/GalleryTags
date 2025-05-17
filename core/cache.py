@@ -88,3 +88,12 @@ class CacheManager:
         removed = before_count - len(self.cache_data)
         if removed > 0:
             print(f"[Cache] Removed {removed} missing files from cache")
+    
+    def get_mtime(self, file_path):
+        """Get cached modification time for a file if available"""
+        norm_path = os.path.normpath(file_path)
+        
+        if norm_path in self.cache_data:
+            return self.cache_data[norm_path]['mtime']
+        
+        return None
