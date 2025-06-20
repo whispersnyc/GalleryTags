@@ -4,14 +4,15 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QGridLayout,
                             QShortcut, QComboBox, QDialog, QFrame, QMenu)
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QTimer
-import os, subprocess, sys
+import os, subprocess, sys, json
 
 from components.image_cell import ImageCell
 from components.loading import LoadingOverlay
 from components.image_popup import ImageDetailsPopup
+from components.export_config_dialog import ExportConfigDialog
 from core.cache import CacheManager
 from core.metadata import get_metadata_field
-from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG
+from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG, EXPORT_CONFIG_FILENAME
 from utils.helpers import natural_sort_key, parse_tags
 
 class ImageGallery(QMainWindow):
@@ -632,12 +633,37 @@ class ImageGallery(QMainWindow):
                 col = 0
                 row += 1
 
-    def export_lists(self, skip_refresh=True):
-        """Export lists based on EXPORT_PATHS configuration"""
+    def export_lists(self, skip_refresh=True, show_menu=True):
+        """Export lists based on directory-specific configuration"""
         if not self.image_cells:
             QMessageBox.information(self, "No Images", "No images loaded to export.")
             return
-
+        
+        if not self.current_folder:
+            QMessageBox.information(self, "No Folder", "No folder is currently loaded.")
+            return
+        
+        # Get path for directory-specific config
+        config_path = os.path.join(self.current_folder, EXPORT_CONFIG_FILENAME)
+        
+        if show_menu:
+            # Show config dialog
+            dialog = ExportConfigDialog(config_path, self)
+            if dialog.exec_() != QDialog.Accepted:
+                return
+        
+        # Load export config
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    export_paths = json.load(f)
+            else:
+                export_paths = {}
+        except Exception as e:
+            QMessageBox.critical(self, "Config Error", 
+                f"Error loading export config: {str(e)}")
+            return
+        
         # Refresh metadata if needed
         if not skip_refresh:
             self.loading_overlay.show()
@@ -652,13 +678,20 @@ class ImageGallery(QMainWindow):
                     QApplication.processEvents()
             
             self.loading_overlay.hide()
-
-        # Get group size from config
-        group_size = EXPORT_CONFIG.get('group_by', 0)
-
+        
         # Process each export path
-        for file_path, tags_str in EXPORT_PATHS.items():
+        for file_path, tags_str in export_paths.items():
             try:
+                # Convert file_path to absolute if relative
+                if not os.path.isabs(file_path):
+                    file_path = os.path.join(self.current_folder, file_path)
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                
+                # Get group size from config
+                group_size = EXPORT_CONFIG.get('group_by', 0)
+
                 # Determine search mode and clean tags string
                 tags_str = tags_str.strip()
                 is_or_mode = tags_str.startswith('|')
@@ -729,9 +762,12 @@ class ImageGallery(QMainWindow):
                 print(f"Error exporting to {file_path}: {e}")
                 QMessageBox.warning(self, "Export Error", 
                     f"Error exporting to {file_path}:\n{str(e)}")
-
-        QMessageBox.information(self, "Export Complete", 
-            f"Successfully exported lists to {len(EXPORT_PATHS)} file(s).")
+        
+        if export_paths:
+            QMessageBox.information(self, "Export Complete", 
+                f"Successfully exported lists to {len(export_paths)} file(s).")
+        else:
+            print("No export paths configured - nothing to export")
 
     def focus_search(self):
         """Focus the search input box"""

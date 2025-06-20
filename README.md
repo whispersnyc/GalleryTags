@@ -1,4 +1,5 @@
 TODO
+- [ ] unicode file names
 - [ ] show all existing tags (among loaded files)
 - [ ] if its tag-sorted, resort after editing tags
 - [ ] edit tags for multiple entries ex. `(multiple values), common tag`
@@ -10,7 +11,7 @@ TODO
 - [ ] bulletproof edge cases and error handle everything
 - [ ] highlight confirm button in Add Tag screen
 
-- [ ] app.py <folder> --export "/path/to/output.md & tag1, tag2" --export ...
+- [ ] app.py <folder> --export "/path/to/output.md" "& tag1, tag2" --export ...
 - [ ] change export config system, add GUI for export
 
 
@@ -19,9 +20,8 @@ gallery-tags/
 │   ├── image_manager.py      # Handles image loading, sorting, filtering
 │   ├── export_manager.py     # Handles export functionality
 │   ├── selection_manager.py  # Handles cell selection logic
-│   └── tag_manager.py       # Handles tag operations
+│   └── tag_manager.py        # Handles tag operations
 ├── ui/
 │   ├── gallery.py           # Only UI-specific code
-│   └── dialogs/
-│       └── tag_dialog.py    # Tag input dialog
+│   └── tag_dialog.py        # Tag input dialog
 └── ...other existing files

@@ -28,7 +28,7 @@ EXPORT_CONFIG = {
     'item_format': "![$fn]($fp/$fn.$fe)\n",
     'group_by': 0,
 }
-
+EXPORT_CONFIG_FILENAME = "! gallery_export.json"
 
 # ---
 
