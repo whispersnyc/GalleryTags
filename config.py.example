@@ -1,39 +1,34 @@
 # Application Configuration
-
-
+## default_folder:
+# the folder to open on startup, leave blank for none
+# use '/' for paths to prevent errors (or use a r'C:\raw string')
+# never put a \ at the end of a path (ex. 'D:\Pictures\' will cause error)
+# ex. 'D:/Pictures'
 APP_CONFIG = {
-    'default_folder': 'D:/Pictures',
-    'cache_file': 'C:/Users/user/.cache/.tag_cache.json',
+    'default_folder': '',
 }
-
-
-# ---
-
 
 # Export Configuration
-
-
-# "& tag1, tag2" means AND while '| tag1, tag2' means OR, default AND
-
-EXPORT_PATHS = {
-    "D:/Pictures/index.md": "| art, screenshots"
-}
-
-# item_format: $fn is filename (no extension), $fe is file extension, $fp is shortest file path, $ffp is full file path
+# You can ignore this part if it's too confusing
+## item_format:
+# $fn is filename (no extension), $fe is file extension, $fp is shortest file path, $ffp is full file path
 # ex. $fp/$fn.$fe = ./screenshot.png (index.md above is in same folder as screenshot.png)
 # ex. $ffp/$fn.$fe = D:/Pictures/screenshot.png
+## heading:
+# insert some custom text at the start of each exported file
+# ex. ---\ncssclasses: fullwidth\nobsidianUIMode: preview\n---\n
+## group_by:
+# every N images, add an extra newline to "group" them
+# this serves as image grid's column count for zremboldt/obsidian-media-grid
 
 EXPORT_CONFIG = {
-    'heading': "---\ncssclasses: fullwidth\n---\n",
     'item_format': "![$fn]($fp/$fn.$fe)\n",
+    'heading': "",
     'group_by': 0,
 }
 EXPORT_CONFIG_FILENAME = ".gallery_export.json"
 
-# ---
-
 # Metadata Field Configuration
-
 FORMAT_CONFIG = {
     '.jpg': {'field': '-Exif:ImageDescription', 'extensions': ['.jpg', '.jpeg']},
     '.png': {'field': '-XMP:Description', 'extensions': ['.png']},
