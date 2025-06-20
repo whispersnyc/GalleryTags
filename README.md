@@ -1,8 +1,13 @@
 # GalleryTags
 
-Intuitive and speedy bulk image tagging tool with Markdown gallery export capabilities.
+This is a fresh take on intuitive and speedy bulk image tagging tool.  
+It's an alternative to trying to sort images in folders when they could belong to multiple categories. Definitely easier to use than your typical cluttered and overcomplicated photographer software, too.  
+You can even export search results as markdown galleries!
 - Built with Obsidian integration but usable generally
 - Supports JPG, PNG, and WebP formats
+- Headless mode for advanced users
+
+Disclaimer: This was a vibe-coding experiment that went really well. However, I'm not responsible for any edge case data loss so use Git if thats crucial. I will rewrite this later as a WebUI.
 
 ## Quick Start
 
@@ -26,7 +31,25 @@ Intuitive and speedy bulk image tagging tool with Markdown gallery export capabi
 - **Search**: Use the search box to filter by tags (comma-separated)
 - **Refresh**: Use Quick Refresh (Ctrl+R) to update modified files
 
-## Features in Detail
+## CLI Usage
+
+Optionally run exports without launching the GUI for advanced users:
+```bash
+# Use directory's .gallery_export.json
+python app.py path/to/images
+
+# Use specific config file
+python app.py path/to/custom_export.json
+```
+
+The app will:
+1. Load the specified config
+2. Process all images in the directory
+3. Generate markdown files according to the export rules
+4. Update the cache
+5. Exit with code 0 on success, 1 on error
+
+## Feature Details
 
 ### Image Selection
 - Click and drag to select multiple images
@@ -43,9 +66,11 @@ Intuitive and speedy bulk image tagging tool with Markdown gallery export capabi
 
 ### Export System
 - Directory-specific export configurations
+- GUI and CLI support for exports
 - Export Markdown format gallery files (customizable)
 - Support for relative paths in exports
 - Grid formatting support for Obsidian Media Grid plugin
+- Headless operation for automation/scripts
 
 ### Search & Sort
 - Search box supports comma-separated tags

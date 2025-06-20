@@ -12,7 +12,7 @@ from components.image_popup import ImageDetailsPopup
 from components.export_config_dialog import ExportConfigDialog
 from core.cache import CacheManager
 from core.metadata import get_metadata_field
-from config import APP_CONFIG, EXPORT_PATHS, EXPORT_CONFIG, EXPORT_CONFIG_FILENAME
+from config import APP_CONFIG, EXPORT_CONFIG, EXPORT_CONFIG_FILENAME
 from utils.helpers import natural_sort_key, parse_tags
 
 class ImageGallery(QMainWindow):

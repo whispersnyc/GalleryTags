@@ -1,10 +1,12 @@
 TODO
 - [ ] unicode file names
 - [ ] show all existing tags (among loaded files)
+- [ ] upload build and add easy quickstart to README
 - [ ] if its tag-sorted, re-sort after editing tags
 - [ ] edit tags for multiple entries ex. `(multiple values), common tag`
 - [ ] `*` = all tags, cli for search/list/get-set
 - [ ] `-tag` = hide items with tag if negative prefix
+- [ ] refactor redundant headless code
 
 - [ ] add a loading indicator for the enter key add tag menu
 - [ ] open file by clicking preview with LAUNCH setting executable; color schemes; video support
