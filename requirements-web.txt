@@ -1,0 +1,12 @@
+# GalleryTags Web UI - Python Dependencies
+# Install with: pip install -r requirements-web.txt
+
+# Web Framework
+Flask>=2.3.0
+flask-cors>=4.0.0
+
+# Image Processing
+Pillow>=10.0.0
+
+# Note: ExifTool must be installed separately and available in system PATH
+# Download from: https://exiftool.org/
