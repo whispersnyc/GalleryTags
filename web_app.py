@@ -14,9 +14,21 @@ from PIL import Image
 import io
 
 # Import existing core modules
-from core.metadata import get_tags, set_tags, process_exports_headless
+from core.metadata import read_tag_metadata, write_tag_metadata, get_short_path_name
 from core.cache import CacheManager
 from utils.helpers import natural_sort_key, parse_tags, get_config
+
+# Wrapper functions for compatibility
+def get_tags(image_path):
+    """Get tags from image metadata"""
+    short_path = get_short_path_name(image_path)
+    return read_tag_metadata(image_path, short_path)
+
+def set_tags(image_path, tags):
+    """Set tags to image metadata"""
+    short_path = get_short_path_name(image_path)
+    tag_text = ', '.join(sorted(tags)) if isinstance(tags, (set, list)) else tags
+    return write_tag_metadata(image_path, tag_text, short_path)
 
 app = Flask(__name__,
             static_folder='web/static',
@@ -54,7 +66,7 @@ def open_folder():
         return jsonify({'error': 'Invalid folder path'}), 400
 
     current_folder = folder_path
-    cache_manager = CacheManager(folder_path)
+    cache_manager = CacheManager()
 
     # Get all supported image files
     supported_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
@@ -110,12 +122,14 @@ def list_images():
                 rel_path = os.path.relpath(full_path, current_folder)
 
                 # Get tags from cache or metadata
+                tags = None
                 if cache_manager and not force_refresh:
-                    tags = cache_manager.get_tags(full_path)
-                else:
+                    tags = cache_manager.get_cached_metadata(full_path)
+
+                if tags is None:
                     tags = get_tags(full_path)
                     if cache_manager:
-                        cache_manager.update_entry(full_path, tags)
+                        cache_manager.update_cache(full_path, tags)
 
                 stat = os.stat(full_path)
                 images.append({
@@ -129,7 +143,7 @@ def list_images():
 
     # Save cache
     if cache_manager:
-        cache_manager.save()
+        cache_manager.save_cache()
 
     return jsonify({'images': images})
 
@@ -208,8 +222,11 @@ def update_image_tags():
     if not current_folder:
         return jsonify({'error': 'No folder opened'}), 400
 
-    # Parse tags
-    tags = parse_tags(tags_input)
+    # Tags can be a string or already parsed
+    if isinstance(tags_input, str):
+        tag_text = tags_input
+    else:
+        tag_text = ', '.join(sorted(tags_input))
 
     results = []
     for image_path in images:
@@ -224,17 +241,24 @@ def update_image_tags():
             continue
 
         try:
-            set_tags(full_path, tags)
+            success = set_tags(full_path, tag_text)
 
-            # Update cache
-            if cache_manager:
-                cache_manager.update_entry(full_path, tags)
+            if success:
+                # Update cache
+                if cache_manager:
+                    cache_manager.update_cache(full_path, tag_text)
 
-            results.append({
-                'path': image_path,
-                'success': True,
-                'tags': tags
-            })
+                results.append({
+                    'path': image_path,
+                    'success': True,
+                    'tags': tag_text
+                })
+            else:
+                results.append({
+                    'path': image_path,
+                    'success': False,
+                    'error': 'Failed to write tags'
+                })
         except Exception as e:
             results.append({
                 'path': image_path,
@@ -244,7 +268,7 @@ def update_image_tags():
 
     # Save cache
     if cache_manager:
-        cache_manager.save()
+        cache_manager.save_cache()
 
     return jsonify({'results': results})
 
@@ -260,11 +284,11 @@ def refresh_cache():
     full_rescan = data.get('full_rescan', False)
 
     if not cache_manager:
-        cache_manager = CacheManager(current_folder)
+        cache_manager = CacheManager()
 
     if full_rescan:
         # Force refresh all
-        cache_manager.cache = {}
+        cache_manager.cache_data = {}
 
     # Quick refresh - only update modified files
     supported_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
@@ -277,17 +301,18 @@ def refresh_cache():
                 full_path = os.path.join(root, file)
 
                 # Check if needs update
-                if full_rescan or cache_manager.needs_update(full_path):
+                cached = cache_manager.get_cached_metadata(full_path)
+                if full_rescan or cached is None:
                     tags = get_tags(full_path)
-                    cache_manager.update_entry(full_path, tags)
+                    cache_manager.update_cache(full_path, tags)
                     updated += 1
 
-    cache_manager.save()
+    cache_manager.save_cache()
 
     return jsonify({
         'success': True,
         'updated': updated,
-        'total': len(cache_manager.cache)
+        'total': len(cache_manager.cache_data)
     })
 
 @app.route('/api/export/config', methods=['GET'])
@@ -333,8 +358,16 @@ def run_export():
         return jsonify({'error': 'No folder opened'}), 400
 
     try:
+        # Check if export config exists
+        config_path = os.path.join(current_folder, '.gallery_export.json')
+        if not os.path.exists(config_path):
+            return jsonify({'error': 'No export configuration found'}), 400
+
+        # Import the function
+        from core.metadata import process_exports_headless
+
         # Use existing headless export functionality
-        success = process_exports_headless(current_folder)
+        success = process_exports_headless(current_folder, config_path)
 
         if success:
             return jsonify({'success': True})
