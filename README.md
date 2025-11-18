@@ -1,57 +1,26 @@
 # GalleryTags
 
-This is a fresh take on intuitive and speedy bulk image tagging tool.
-It's an alternative to trying to sort images in folders when they could belong to multiple categories. Definitely easier to use than your typical cluttered and overcomplicated photographer software, too.
+This is a fresh take on intuitive and speedy bulk image tagging tool.  
+It's an alternative to trying to sort images in folders when they could belong to multiple categories. Definitely easier to use than your typical cluttered and overcomplicated photographer software, too.  
 You can even export search results as markdown galleries!
 - Built with Obsidian integration but usable generally
 - Supports JPG, PNG, and WebP formats
 - Headless mode for advanced users
-- **Now available as a Web UI!** (see below)
 
-Disclaimer: This was a vibe-coding experiment that went really well. However, I'm not responsible for any edge case data loss so use Git if thats crucial.
-
-## Choose Your Interface
-
-### 🌐 Web UI (Recommended)
-
-Modern browser-based interface with full functionality:
-
-```bash
-# Install dependencies
-pip install -r requirements-web.txt
-
-# Run the web server
-python web_app.py
-
-# Or use the launcher scripts
-./run_web.sh        # Linux/Mac
-run_web.bat         # Windows
-```
-
-Then open http://127.0.0.1:5000 in your browser.
-
-**See [README_WEB.md](README_WEB.md) for complete web UI documentation.**
-
-### 🖥️ Desktop UI (Classic)
-
-Traditional PyQt5 desktop application:
-
-```bash
-# Install dependencies
-pip install PyQt5 Pillow
-
-# Run the desktop app
-python app.py
-```
-
-**Both interfaces share the same core functionality and can be used interchangeably.**
+Disclaimer: This was a vibe-coding experiment that went really well. However, I'm not responsible for any edge case data loss so use Git if thats crucial. I will rewrite this later as a WebUI.
 
 ## Quick Start
 
-1. Install [ExifTool](https://exiftool.org/) and ensure it's in your system PATH
-2. Choose your preferred interface (Web or Desktop) and install dependencies
-3. (Optional) Rename `config.py.example` to `config.py` and customize settings
-4. Run the application using the commands above
+1. Install dependencies:
+   ```bash
+   pip install PyQt5 Pillow
+   ```
+2. Install [ExifTool](https://exiftool.org/) and ensure it's in your system PATH
+3. Rename `config.py.example` to `config.py` and customize settings if desired
+4. Run the app:
+   ```bash
+   python main.py
+   ```
 
 ## Basic Usage
 
