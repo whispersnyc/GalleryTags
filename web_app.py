@@ -54,7 +54,7 @@ def open_folder():
         return jsonify({'error': 'Invalid folder path'}), 400
 
     current_folder = folder_path
-    cache_manager = CacheManager(folder_path)
+    cache_manager = CacheManager()
 
     # Get all supported image files
     supported_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
@@ -111,11 +111,14 @@ def list_images():
 
                 # Get tags from cache or metadata
                 if cache_manager and not force_refresh:
-                    tags = cache_manager.get_tags(full_path)
+                    tags = cache_manager.get_cached_metadata(full_path)
+                    if tags is None:
+                        tags = get_tags(full_path)
+                        cache_manager.update_cache(full_path, tags)
                 else:
                     tags = get_tags(full_path)
                     if cache_manager:
-                        cache_manager.update_entry(full_path, tags)
+                        cache_manager.update_cache(full_path, tags)
 
                 stat = os.stat(full_path)
                 images.append({
@@ -129,7 +132,7 @@ def list_images():
 
     # Save cache
     if cache_manager:
-        cache_manager.save()
+        cache_manager.save_cache()
 
     return jsonify({'images': images})
 
@@ -228,7 +231,7 @@ def update_image_tags():
 
             # Update cache
             if cache_manager:
-                cache_manager.update_entry(full_path, tags)
+                cache_manager.update_cache(full_path, tags)
 
             results.append({
                 'path': image_path,
@@ -244,7 +247,7 @@ def update_image_tags():
 
     # Save cache
     if cache_manager:
-        cache_manager.save()
+        cache_manager.save_cache()
 
     return jsonify({'results': results})
 
@@ -260,11 +263,11 @@ def refresh_cache():
     full_rescan = data.get('full_rescan', False)
 
     if not cache_manager:
-        cache_manager = CacheManager(current_folder)
+        cache_manager = CacheManager()
 
     if full_rescan:
         # Force refresh all
-        cache_manager.cache = {}
+        cache_manager.cache_data = {}
 
     # Quick refresh - only update modified files
     supported_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
@@ -279,15 +282,15 @@ def refresh_cache():
                 # Check if needs update
                 if full_rescan or cache_manager.needs_update(full_path):
                     tags = get_tags(full_path)
-                    cache_manager.update_entry(full_path, tags)
+                    cache_manager.update_cache(full_path, tags)
                     updated += 1
 
-    cache_manager.save()
+    cache_manager.save_cache()
 
     return jsonify({
         'success': True,
         'updated': updated,
-        'total': len(cache_manager.cache)
+        'total': len(cache_manager.cache_data)
     })
 
 @app.route('/api/export/config', methods=['GET'])

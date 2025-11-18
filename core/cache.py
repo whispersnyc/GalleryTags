@@ -92,8 +92,22 @@ class CacheManager:
     def get_mtime(self, file_path):
         """Get cached modification time for a file if available"""
         norm_path = os.path.normpath(file_path)
-        
+
         if norm_path in self.cache_data:
             return self.cache_data[norm_path]['mtime']
-        
+
         return None
+
+    def needs_update(self, file_path):
+        """Check if a file needs to be updated in cache"""
+        norm_path = os.path.normpath(file_path)
+
+        # If not in cache, needs update
+        if norm_path not in self.cache_data:
+            return True
+
+        # Check if file has been modified since last cache
+        cached_mtime = self.cache_data[norm_path]['mtime']
+        current_mtime = os.path.getmtime(file_path)
+
+        return abs(cached_mtime - current_mtime) >= 0.1  # Allow small time difference

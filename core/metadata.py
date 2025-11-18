@@ -103,22 +103,42 @@ def write_tag_metadata(image_path, tag_text, short_path=None):
         print(f"Error writing metadata to {image_path}: {e}")
         return False
 
-def process_exports_headless(working_dir, config_path):
+# Convenience wrappers for web API compatibility
+def get_tags(file_path):
+    """Get tags from image metadata (web API compatible)"""
+    return read_tag_metadata(file_path)
+
+def set_tags(file_path, tags):
+    """Set tags to image metadata (web API compatible)"""
+    # Convert list/set to comma-separated string if needed
+    if isinstance(tags, (list, set)):
+        tags = ', '.join(tags)
+    return write_tag_metadata(file_path, tags)
+
+def process_exports_headless(working_dir, config_path=None):
     """Process exports in headless mode"""
     from core.cache import CacheManager
     from utils.helpers import parse_tags
     from config import EXPORT_CONFIG
     import json, os
-    
+
     try:
+        # Use default config path if not provided
+        if config_path is None:
+            config_path = os.path.join(working_dir, '.gallery_export.json')
+
+        if not os.path.exists(config_path):
+            print(f"No export config found at: {config_path}")
+            return True
+
         # Load export config
         with open(config_path, 'r', encoding='utf-8') as f:
             export_paths = json.load(f)
-        
+
         if not export_paths:
             print("No export paths configured - nothing to export")
             return True
-        
+
         # Initialize cache
         cache_manager = CacheManager()
         

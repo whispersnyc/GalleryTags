@@ -1,99 +1,96 @@
-# GalleryTags
+# GalleryTags - Web UI
 
-This is a fresh take on intuitive and speedy bulk image tagging tool.  
-It's an alternative to trying to sort images in folders when they could belong to multiple categories. Definitely easier to use than your typical cluttered and overcomplicated photographer software, too.  
-You can even export search results as markdown galleries!
-- Built with Obsidian integration but usable generally
+A modern, intuitive bulk image tagging tool with a browser-based interface. Perfect for organizing images that belong to multiple categories without the hassle of folder hierarchies. Export your tagged galleries as markdown files!
+
+- Built with Obsidian integration in mind, usable generally
 - Supports JPG, PNG, and WebP formats
-- Headless mode for advanced users
-
-Disclaimer: This was a vibe-coding experiment that went really well. However, I'm not responsible for any edge case data loss so use Git if thats crucial. I will rewrite this later as a WebUI.
+- Tag recalculation ensures only used tags are shown
+- Multi-image navigation in modal editor
+- Mobile-friendly with touch-hold support
+- Headless CLI mode for automation
 
 ## Quick Start
 
-1. Install dependencies:
+1. **Install dependencies:**
    ```bash
-   pip install PyQt5 Pillow
-   ```
-2. Install [ExifTool](https://exiftool.org/) and ensure it's in your system PATH
-3. Rename `config.py.example` to `config.py` and customize settings if desired
-4. Run the app:
-   ```bash
-   python main.py
+   pip install flask flask-cors pillow
    ```
 
-## Basic Usage
+2. **Install ExifTool:**
+   Download from [exiftool.org](https://exiftool.org/) and ensure it's in your system PATH
 
-- **Open Folder**: Click "Open Folder" or press Ctrl+O
-- **Select Images**: Click and drag to select multiple images
-- **Add Tags**: Press Enter to add tags to selected images
-- **Quick Edit**: Double-click an image to edit its tags directly
-- **Search**: Use the search box to filter by tags (comma-separated)
-- **Refresh**: Use Quick Refresh (Ctrl+R) to update modified files
+3. **Configure (optional):**
+   ```bash
+   cp config.py.example config.py
+   # Edit config.py to set default folder and export settings
+   ```
 
-## CLI Usage
+4. **Launch the web UI:**
+   ```bash
+   python app.py
+   ```
 
-Optionally run exports without launching the GUI for advanced users:
-```bash
-# Use directory's .gallery_export.json
-python app.py path/to/images
+   Or use the launcher scripts:
+   - Linux/Mac: `./run_web.sh`
+   - Windows: `run_web.bat`
 
-# Use specific config file
-python app.py path/to/custom_export.json
-```
+5. **Open in browser:**
+   Navigate to `http://127.0.0.1:5000`
 
-The app will:
-1. Load the specified config
-2. Process all images in the directory
-3. Generate markdown files according to the export rules
-4. Update the cache
-5. Exit with code 0 on success, 1 on error
+## Web UI Features
 
-## Feature Details
+### Modern Modal Editor
+- Refined tag panel with vertical scrolling
+- **Tag buttons**: Click to toggle tags on/off
+- **Right-click or long-press** (750ms) on tags to remove from all images in modal
+- **"+ Add New" button**: Opens browser prompt to create new tags
+- **Tag recalculation**: Only shows tags currently in use across your gallery
+- Unused tags are automatically removed when modal closes
 
-### Image Selection
-- Click and drag to select multiple images
-- Double-click an image for detailed view and tag editing
-- Press Escape to clear selection
-- Use "Select All" (Ctrl+A) to toggle selection of all visible images
+### Multi-Image Navigation
+- **Left/Right arrows**: Navigate through selected images in the modal
+- **Dot indicators**: Show which image you're viewing in the sequence
+- **Gallery-style browsing**: Edit tags for multiple images without closing the modal
 
-### Tag Management
-- Add tags via Enter key or "Add Tag" button when images are selected
-- Tags are comma-separated
-- Double-click an image for single-image tag editing
-- Tags are stored in metadata (configurable)
-    - Default settings compatibile with [Obsidian Image Metadata plugin](alexeiskachykhin/obsidian-image-metadata-plugin)
+### Image Selection & Management
+- **Drag to select**: Click and drag across images to select multiple
+- **Ctrl+Click**: Toggle individual images
+- **Shift+Click**: Range selection
+- **Double-click**: Open image in modal editor
+- **Batch tagging**: Apply tags to all selected images at once
+
+### Search & Filter
+- **Search box**: Enter comma-separated tags to filter images
+- **AND/OR modes**:
+  - AND: Show images with all specified tags
+  - OR: Show images with any specified tag
+- **Live filtering**: Results update as you type
+
+### Sorting Options
+- Name (A-Z or Z-A)
+- Date (Newest or Oldest)
+- Tags (A-Z or Z-A)
 
 ### Export System
-- Directory-specific export configurations
-- GUI and CLI support for exports
-- Export Markdown format gallery files (customizable)
-- Support for relative paths in exports
-- Grid formatting support for Obsidian Media Grid plugin
-- Headless operation for automation/scripts
+- **Directory-specific configs**: Each folder can have its own `.gallery_export.json`
+- **Tag-based exports**: Generate markdown galleries filtered by tags
+- **Grid support**: Compatible with Obsidian Media Grid plugin
+- **Relative paths**: Exports use relative paths for portability
+- **OR/AND logic**: Prefix tags with `|` for OR mode, `&` for AND (default)
 
-### Search & Sort
-- Search box supports comma-separated tags
-- Toggle AND/OR mode for searching:
-  - AND: All tags must match
-  - OR: Any tag must match
-- Sort options:
-  - Name (ascending/descending)
-  - Modified Date (ascending/descending)
-  - Tags (ascending/descending)
+### Statistics
+- View total images, file sizes, and unique tags
+- **Tag cloud**: Click any tag to filter the gallery
+- Track your tagging progress
 
-### Cache System
-- Automatic caching of tag data for fast loading
-- Multiple refresh options:
-  - Quick Refresh (Ctrl+R): Updates only modified files
-  - Full Rescan: Re-reads all metadata
-  - Auto-refresh on startup: Only checks modified files
+### Performance
+- **Smart caching**: Metadata is cached for fast loading
+- **Quick refresh**: Only updates modified files
+- **Full rescan**: Force re-read of all metadata when needed
 
 ## Gallery Export
 
-Each directory can have its own `.gallery_export.json` file that defines export rules.
-The exported files will contain all your images that match the respective tag queries.
-This file is generated/edited by an intuitive GUI in the app; same `|` / `&` logic applies.
+Create a `.gallery_export.json` file in your image directory:
 
 ```json
 {
@@ -103,29 +100,191 @@ This file is generated/edited by an intuitive GUI in the app; same `|` / `&` log
 }
 ```
 
-- File paths can be relative to the gallery directory
-- Prefix tags with `|` for OR mode, `&` for AND mode (default)
-- Configure export format in `config.py`:
-  - `item_format`: Template for each image entry
-  - `heading`: Text to add at start of file
-  - `group_by`: Number of images per row (for grid layouts)
+- **Relative paths**: Files are created relative to the image directory
+- **OR mode**: Prefix with `|` (e.g., `"| tag1, tag2"`)
+- **AND mode**: Default or prefix with `&`
 
-## Configuration
+Configure export format in `config.py`:
+```python
+EXPORT_CONFIG = {
+    'item_format': '![]($fp/$fn.$fe)\n',  # Image format
+    'heading': '# Gallery\n\n',            # File header
+    'group_by': 0                           # Images per row (0 = no grouping)
+}
+```
 
-Copy `config.py.example` to `config.py` and customize:
+## CLI / Headless Mode
 
-- `APP_CONFIG['default_folder']`: Default folder to open on startup
-- `EXPORT_CONFIG`: Export formatting settings
-- `FORMAT_CONFIG`: Metadata field configuration per file type
+Run exports without the web UI for automation:
+
+```bash
+# Use directory's .gallery_export.json
+python app.py path/to/images
+
+# Use specific config file
+python app.py path/to/custom_export.json
+```
+
+Perfect for scripts, cron jobs, or CI/CD pipelines.
 
 ## Keyboard Shortcuts
 
-- `Ctrl+O`: Open folder
-- `Ctrl+A`: Select/deselect all
-- `Ctrl+R`: Quick refresh
-- `Ctrl+Shift+R`: Full rescan
-- `Ctrl+F`: Focus search box
-- `Ctrl+E`: Show export dialog
-- `Ctrl+Shift+E`: Export without refresh
-- `Enter`: Add tag to selection
-- `Escape`: Clear selection
+- **Ctrl+O**: Open folder
+- **Ctrl+A**: Select all / Deselect all
+- **Ctrl+R**: Quick refresh (modified files only)
+- **Ctrl+Shift+R**: Full rescan (all files)
+- **Ctrl+F**: Focus search box
+- **Ctrl+E**: Open export dialog
+- **Enter**: Apply tags to selected images
+- **Escape**: Clear selection or close modals
+
+## Mobile Support
+
+- **Touch-friendly**: All UI elements are optimized for touch
+- **Responsive layout**: Adapts to mobile screens
+- **Touch-hold**: Press and hold a tag for 750ms to reset it (same as right-click)
+- **Haptic feedback**: Vibration on supported devices
+
+## Configuration
+
+The `config.py` file contains all customization options:
+
+```python
+# App settings
+APP_CONFIG = {
+    'default_folder': '/path/to/your/images'  # Auto-load on startup
+}
+
+# Export format
+EXPORT_CONFIG = {
+    'item_format': '![]($fp/$fn.$fe)\n',     # Obsidian-style image links
+    'heading': '# Gallery\n\n',
+    'group_by': 0                             # Grid layout (0 = list)
+}
+
+# Metadata fields per format
+FORMAT_CONFIG = {
+    'jpeg': {
+        'extensions': ['.jpg', '.jpeg'],
+        'field': '-ImageDescription'          # EXIF field
+    },
+    'png': {
+        'extensions': ['.png'],
+        'field': '-Description'               # PNG field
+    },
+    # ...
+}
+```
+
+## Technical Details
+
+### Architecture
+- **Backend**: Flask REST API
+- **Frontend**: Vanilla JavaScript (no framework bloat)
+- **Storage**: ExifTool for metadata, JSON for cache
+- **Cache**: Platform-specific cache directory for fast loads
+
+### Tag Recalculation
+Tags are recalculated when:
+- Gallery loads
+- Modal opens
+- Tags are saved
+- Batch tags are applied
+
+This ensures the tag list only shows tags actually in use.
+
+### Cache System
+- Automatic caching in platform-specific directories:
+  - Windows: `%LOCALAPPDATA%\GalleryTags`
+  - Linux/Mac: `~/.config/gallerytags`
+- Only updates when files are modified
+- Survives app restarts
+
+## Advanced Options
+
+### Custom Metadata Fields
+Edit `FORMAT_CONFIG` in `config.py` to use different metadata fields:
+
+```python
+FORMAT_CONFIG = {
+    'jpeg': {
+        'extensions': ['.jpg', '.jpeg'],
+        'field': '-Subject'  # Use Subject instead of ImageDescription
+    }
+}
+```
+
+### Command Line Arguments
+```bash
+python app.py --host 0.0.0.0 --port 8080 --debug
+```
+
+Options:
+- `--host`: Bind address (default: 127.0.0.1)
+- `--port`: Port number (default: 5000)
+- `--debug`: Enable Flask debug mode
+
+## Troubleshooting
+
+**ExifTool not found:**
+- Make sure ExifTool is installed and in your PATH
+- Test by running `exiftool -ver` in terminal
+
+**Images not loading:**
+- Check file permissions
+- Verify image formats are supported (.jpg, .jpeg, .png, .webp)
+- Try a full rescan (Ctrl+Shift+R)
+
+**Tags not saving:**
+- Ensure write permissions on image files
+- Check ExifTool supports the file format
+- Look for error messages in the terminal
+
+**Cache issues:**
+- Delete the cache file manually:
+  - Windows: `%LOCALAPPDATA%\GalleryTags\gallery_cache.json`
+  - Linux/Mac: `~/.config/gallerytags/gallery_cache.json`
+
+## Development
+
+The project structure is simple and hackable:
+
+```
+GalleryTags/
+├── app.py              # Main entry point (Flask app)
+├── web_app.py          # Same as app.py (kept for compatibility)
+├── core/
+│   ├── metadata.py     # ExifTool integration
+│   └── cache.py        # Cache management
+├── utils/
+│   └── helpers.py      # Utility functions
+├── web/
+│   ├── templates/
+│   │   └── index.html  # Single-page application
+│   └── static/
+│       ├── css/
+│       │   └── style.css
+│       └── js/
+│           └── app.js  # Frontend logic
+└── config.py           # Configuration
+```
+
+## Obsidian Integration
+
+Works great with:
+- [Image Metadata Plugin](https://github.com/alexeiskachykhin/obsidian-image-metadata-plugin) - Display tags in Obsidian
+- [Media Grid Plugin](https://github.com/IshikuraPC/Media-Grid-plugin) - Grid layouts for galleries
+
+Default config is compatible with these plugins out of the box.
+
+## License
+
+Use freely, modify as needed, no warranties provided.
+
+## Acknowledgments
+
+Built as a vibe-coding experiment. Rewritten from desktop (PyQt5) to modern web UI.
+
+---
+
+**Note:** The old desktop UI has been archived in `.archive/desktop-ui/` if you need it.

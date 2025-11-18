@@ -181,3 +181,6 @@ cython_debug/
 .cursorindexingignore
 
 config.py
+
+# Archive directory (old desktop UI)
+.archive/
