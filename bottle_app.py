@@ -196,6 +196,27 @@ def index():
             gap: 10px;
             align-items: center;
             flex-wrap: wrap;
+            justify-content: space-between;
+        }
+        .toolbar-left {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex: 1;
+        }
+        .toolbar-center {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+        .toolbar-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1;
         }
         .toolbar h1 {
             font-size: 20px;
@@ -685,19 +706,25 @@ def index():
 
     <div class="toolbar">
         <div class="toolbar-content">
-            <button class="folder-btn" id="folderBtn" onclick="openFolderPopup()">
-                📁 <span id="selectedFolderText">Select a folder...</span>
-            </button>
-            <button onclick="toggleTagBar()">🏷️ Tags</button>
-            <select id="sortSelect">
-                <option value="name_asc">Name (ascending)</option>
-                <option value="name_desc">Name (descending)</option>
-                <option value="modified_asc">Modified Date (ascending)</option>
-                <option value="modified_desc">Modified Date (descending)</option>
-                <option value="tags_asc">Tags (ascending)</option>
-                <option value="tags_desc">Tags (descending)</option>
-            </select>
-            <button onclick="refreshAll()">Refresh All</button>
+            <div class="toolbar-left">
+                <select id="sortSelect" onchange="applySorting()">
+                    <option value="name_asc">Name (ascending)</option>
+                    <option value="name_desc">Name (descending)</option>
+                    <option value="modified_asc">Modified Date (ascending)</option>
+                    <option value="modified_desc">Modified Date (descending)</option>
+                    <option value="tags_asc">Tags (ascending)</option>
+                    <option value="tags_desc">Tags (descending)</option>
+                </select>
+            </div>
+            <div class="toolbar-center">
+                <button class="folder-btn" id="folderBtn" onclick="openFolderPopup()">
+                    📁 <span id="selectedFolderText">Select a folder...</span>
+                </button>
+            </div>
+            <div class="toolbar-right">
+                <button onclick="toggleTagBar()">🏷️ Tags</button>
+                <button onclick="refreshAll()" title="Refresh All">🔄</button>
+            </div>
         </div>
     </div>
 
@@ -972,6 +999,59 @@ def index():
             displayImages(filtered);
             document.getElementById('statusText').textContent =
                 `Found ${filtered.length} of ${allImages.length} image(s) matching filter`;
+        }
+
+        function applySorting() {
+            const sortOption = document.getElementById('sortSelect').value;
+
+            // Get currently displayed images (respecting filters)
+            const gallery = document.getElementById('gallery');
+            const cards = Array.from(gallery.querySelectorAll('.image-card'));
+
+            if (cards.length === 0) return;
+
+            // Extract image data from cards
+            let imagesToSort = cards.map(card => ({
+                path: card.dataset.path,
+                name: card.dataset.name,
+                tags: card.dataset.tags || ''
+            }));
+
+            // Sort the images
+            if (sortOption.startsWith('name_')) {
+                const reverse = sortOption.endsWith('_desc');
+                imagesToSort.sort((a, b) => {
+                    const comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    return reverse ? -comparison : comparison;
+                });
+            } else if (sortOption.startsWith('modified_')) {
+                // For client-side sorting, we need mtime from allImages
+                const reverse = sortOption.endsWith('_desc');
+                const pathToImage = new Map(allImages.map(img => [img.path, img]));
+                imagesToSort.sort((a, b) => {
+                    const imgA = pathToImage.get(a.path);
+                    const imgB = pathToImage.get(b.path);
+                    // We don't have mtime on client, so reload from server
+                    return 0; // Will trigger server reload
+                });
+                // Reload with server-side sorting for modified date
+                loadImages();
+                return;
+            } else if (sortOption.startsWith('tags_')) {
+                const reverse = sortOption.endsWith('_desc');
+                const tagged = imagesToSort.filter(img => img.tags);
+                const untagged = imagesToSort.filter(img => !img.tags);
+
+                tagged.sort((a, b) => {
+                    const comparison = a.tags.toLowerCase().localeCompare(b.tags.toLowerCase());
+                    return reverse ? -comparison : comparison;
+                });
+
+                imagesToSort = [...tagged, ...untagged];
+            }
+
+            // Re-display with new order
+            displayImages(imagesToSort);
         }
 
         function displayImages(images) {
