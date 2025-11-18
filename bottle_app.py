@@ -388,17 +388,33 @@ def index():
         }
 
         function refreshAll() {
-            if (!confirm('This will refresh all cached tags. Continue?')) {
+            const folder = document.getElementById('folderSelect').value;
+            const recursive = document.getElementById('recursiveToggle').checked;
+
+            if (!folder) {
+                alert('Please select a folder first');
+                return;
+            }
+
+            const recursiveText = recursive ? ' (recursively)' : '';
+            if (!confirm(`This will refresh modified files in the current folder${recursiveText}. Continue?`)) {
                 return;
             }
 
             document.getElementById('statusText').textContent = 'Refreshing cache...';
 
-            fetch('/api/refresh', { method: 'POST' })
+            const params = new URLSearchParams({
+                folder: folder,
+                recursive: recursive ? '1' : '0'
+            });
+
+            fetch('/api/refresh?' + params, { method: 'POST' })
                 .then(res => res.json())
                 .then(data => {
                     document.getElementById('statusText').textContent = data.message;
                     alert(data.message);
+                    // Reload images to show updated tags
+                    loadImages();
                 })
                 .catch(err => {
                     console.error('Error refreshing:', err);
@@ -497,15 +513,58 @@ def serve_image():
 
 @app.route('/api/refresh', method='POST')
 def api_refresh():
-    """Refresh all cache (clear and save)"""
+    """Refresh cache for modified files in specified folder"""
     response.content_type = 'application/json'
 
+    folder_rel = request.query.get('folder', '')
+    recursive = request.query.get('recursive', '0') == '1'
+
+    if not folder_rel:
+        response.status = 400
+        return json.dumps({'error': 'No folder specified'})
+
+    folder_path = os.path.join(BASE_PATH, folder_rel)
+    if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+        response.status = 400
+        return json.dumps({'error': 'Invalid folder'})
+
     try:
-        # Clear the cache
-        cache_manager.cache_data = {}
+        # Get all images in folder
+        images = get_images_in_folder(folder_path, recursive)
+
+        refreshed_count = 0
+        skipped_count = 0
+
+        for img_path in images:
+            norm_path = os.path.normpath(img_path)
+            current_mtime = os.path.getmtime(img_path)
+
+            # Check if file needs refresh
+            needs_refresh = False
+
+            if norm_path in cache_manager.cache_data:
+                cached_mtime = cache_manager.cache_data[norm_path]['mtime']
+                # Refresh if file is newer than cache (allowing 0.1s tolerance)
+                if current_mtime - cached_mtime > 0.1:
+                    needs_refresh = True
+                else:
+                    skipped_count += 1
+            else:
+                # Not in cache, needs refresh
+                needs_refresh = True
+
+            if needs_refresh:
+                # Force re-read from file
+                tags = read_tag_metadata(img_path)
+                cache_manager.update_cache(img_path, tags)
+                refreshed_count += 1
+
+        # Save updated cache
         cache_manager.save_cache()
 
-        return json.dumps({'message': 'Cache cleared successfully'})
+        message = f'Refreshed {refreshed_count} modified file(s), skipped {skipped_count} up-to-date file(s)'
+        return json.dumps({'message': message, 'refreshed': refreshed_count, 'skipped': skipped_count})
+
     except Exception as e:
         response.status = 500
         return json.dumps({'error': str(e)})

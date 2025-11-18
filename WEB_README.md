@@ -6,9 +6,9 @@ A simple web-based image gallery with tag search functionality using Bottle.py.
 
 - **Folder Selection**: Browse and select subfolders from a configured BASE_PATH
 - **Recursive Mode**: Toggle to include images from subfolders recursively
-- **Smart Tag Caching**: Tags are cached with last-modified timestamp validation
+- **Smart Tag Caching**: Tags are cached globally with last-modified timestamp validation
 - **Search with AND/OR**: Search images by tags using AND (default) or OR logic
-- **Refresh Cache**: Clear all cached tags with a single button
+- **Refresh Cache**: Refresh only modified files in the current folder with a single button
 
 ## Setup
 
@@ -43,14 +43,17 @@ Then open your browser to: http://localhost:8080
    - OR mode: `| cat, dog` - finds images with EITHER tag
    - AND mode (explicit): `& cat, dog` - finds images with BOTH tags
 4. **Load**: Click "Load" to display the images
-5. **Refresh All**: Click "Refresh All" to clear the tag cache
+5. **Refresh All**: Click "Refresh All" to refresh tags for modified files in the current folder (respects recursive toggle)
 
 ## Tag Caching
 
-- Tags are automatically cached when first read
-- Cache checks file modification time (mtime)
-- If file is modified after caching, tags are re-read from the file
-- Cache is stored in: `~/.config/gallerytags/gallery_cache.json` (Linux/Mac) or `%LOCALAPPDATA%\GalleryTags\gallery_cache.json` (Windows)
+- **Global Cache**: All tags are cached in a single global cache file (not per-folder)
+- **Automatic Validation**: Cache automatically checks file modification time (mtime) when loading
+- **Smart Refresh**: The "Refresh All" button only refreshes files that have been modified since caching
+- **Folder-Specific Refresh**: Refresh only affects the currently selected folder (with recursive option)
+- **Cache Location**:
+  - Linux/Mac: `~/.config/gallerytags/gallery_cache.json`
+  - Windows: `%LOCALAPPDATA%\GalleryTags\gallery_cache.json`
 
 ## Configuration
 
@@ -66,4 +69,4 @@ Edit `config.py` to customize:
 - `GET /api/folders` - Get folder tree
 - `GET /api/images?folder=...&recursive=0&search=...` - Get images with optional search
 - `GET /image?path=...` - Serve image file
-- `POST /api/refresh` - Clear tag cache
+- `POST /api/refresh?folder=...&recursive=0` - Refresh modified files in specified folder
