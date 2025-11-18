@@ -26,3 +26,6 @@ gallery-tags/
 ├── ui/
 │   ├── gallery.py           # Only UI-specific code
 │   └── tag_dialog.py        # Tag input dialog
+
+
+floating tagbar, X Untagged option, pywebview/server mode (systray and clickable toast).
