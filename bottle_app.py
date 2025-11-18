@@ -504,9 +504,11 @@ def index():
             padding: 15px;
             border-radius: 8px;
             min-width: 500px;
+            max-width: 600px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            flex: 1;
+            overflow: hidden;
         }
         .image-modal-editor label {
             font-weight: 500;
@@ -514,7 +516,6 @@ def index():
             font-size: 14px;
         }
         .modal-tags-container {
-            max-height: 150px;
             overflow-y: auto;
             border: 2px solid #bdc3c7;
             border-radius: 4px;
@@ -522,7 +523,8 @@ def index():
             display: flex;
             flex-wrap: wrap;
             gap: 6px;
-            min-height: 50px;
+            align-content: flex-start;
+            flex: 1;
         }
         .modal-tags-container.empty {
             align-items: center;
@@ -554,6 +556,15 @@ def index():
             background: #e3f2fd;
             color: #1565c0;
             border-color: #64b5f6;
+        }
+        .modal-tag-button.add-new {
+            background: #fff3e0;
+            color: #e65100;
+            border-color: #ffb74d;
+            border-style: dashed;
+        }
+        .modal-tag-button.add-new:hover {
+            background: #ffe0b2;
         }
         .image-modal-input {
             width: 100%;
@@ -737,13 +748,9 @@ def index():
         <div class="image-modal-content">
             <img class="image-modal-image" id="modalImage" src="" alt="">
             <div class="image-modal-editor">
-                <label>Tags (click to toggle):</label>
                 <div class="modal-tags-container" id="modalTagsContainer">
                     <span>No tags available</span>
                 </div>
-                <label for="modalTagInput">Add New Tag:</label>
-                <input type="text" id="modalTagInput" class="image-modal-input" placeholder="Type new tag name and press Enter...">
-                <div class="image-modal-hint">Click tags to toggle • Type to add new • Enter to save • Escape to cancel</div>
             </div>
         </div>
     </div>
@@ -1289,17 +1296,8 @@ def index():
             // Render tags
             renderModalTags();
 
-            // Clear and focus input
-            const input = document.getElementById('modalTagInput');
-            input.value = '';
-
             // Show modal
             document.getElementById('imageModal').classList.add('active');
-
-            // Focus on input after a short delay
-            setTimeout(() => {
-                input.focus();
-            }, 100);
         }
 
         function openMultiEditModal() {
@@ -1341,29 +1339,13 @@ def index():
             // Render tags
             renderModalTags();
 
-            // Clear and focus input
-            const input = document.getElementById('modalTagInput');
-            input.value = '';
-
             // Show modal
             document.getElementById('imageModal').classList.add('active');
-
-            // Focus on input after a short delay
-            setTimeout(() => {
-                input.focus();
-            }, 100);
         }
 
         function renderModalTags() {
             const container = document.getElementById('modalTagsContainer');
             container.innerHTML = '';
-
-            if (allTags.size === 0) {
-                container.classList.add('empty');
-                container.innerHTML = '<span>No tags available</span>';
-                return;
-            }
-
             container.classList.remove('empty');
 
             // Sort all tags alphabetically
@@ -1396,20 +1378,29 @@ def index():
                 btn.onclick = (e) => {
                     e.preventDefault();
                     toggleModalTag(tag, btn);
-                    // Refocus input
-                    document.getElementById('modalTagInput').focus();
                 };
 
                 // Right-click to reset
                 btn.oncontextmenu = (e) => {
                     e.preventDefault();
                     resetModalTag(tag, btn);
-                    // Refocus input
-                    document.getElementById('modalTagInput').focus();
                 };
 
                 container.appendChild(btn);
             });
+
+            // Add "+ Add New" button at the end
+            const addBtn = document.createElement('button');
+            addBtn.className = 'modal-tag-button add-new';
+            addBtn.textContent = '+ Add New';
+            addBtn.onclick = (e) => {
+                e.preventDefault();
+                const newTag = prompt('Enter new tag name:');
+                if (newTag) {
+                    addModalTag(newTag);
+                }
+            };
+            container.appendChild(addBtn);
         }
 
         function toggleModalTag(tag, button) {
@@ -1511,6 +1502,19 @@ def index():
             currentImagePath = '';
             currentImageTags.clear();
             originalTagsString = '';
+
+            // Recalculate allTags from actual images to remove any unused tags
+            // (e.g., tags that were created but not saved)
+            if (!saved) {
+                allTags.clear();
+                allImages.forEach(img => {
+                    if (img.tags) {
+                        const tags = img.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+                        tags.forEach(tag => allTags.add(tag));
+                    }
+                });
+                buildTagBar();
+            }
 
             // If we saved in multi-edit mode, clear selections and exit selection mode
             if (saved && isMultiEditMode) {
@@ -1633,39 +1637,17 @@ def index():
             }, 2000);
         }
 
-        // Modal input handlers
-        const modalInput = document.getElementById('modalTagInput');
-
-        modalInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const value = this.value.trim();
-                if (value) {
-                    // Add tag
-                    addModalTag(value);
-                    this.value = '';
-                } else {
-                    // Empty input, save and close
-                    saveImageTags();
-                }
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
+        // Close modal when clicking outside
+        document.getElementById('imageModal').addEventListener('click', function(e) {
+            if (e.target.id === 'imageModal') {
                 closeImageModal(false);
             }
         });
 
-        // Prevent clicks on modal content from bubbling
-        document.querySelector('.image-modal-content').addEventListener('click', function(e) {
-            e.stopPropagation();
-            // Refocus input if it's not already focused
-            if (document.activeElement !== modalInput) {
-                modalInput.focus();
-            }
-        });
-
-        // Close modal when clicking outside
-        document.getElementById('imageModal').addEventListener('click', function(e) {
-            if (e.target.id === 'imageModal') {
+        // Add keyboard handler for Escape key to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && document.getElementById('imageModal').classList.contains('active')) {
+                e.preventDefault();
                 closeImageModal(false);
             }
         });
