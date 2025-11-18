@@ -329,6 +329,71 @@ def index():
         .folder-icon {
             font-size: 16px;
         }
+        /* Tag Bar */
+        .tag-bar {
+            background: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .tag-bar.visible {
+            display: block;
+        }
+        .tag-bar-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .tag-bar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tag-bar-header h3 {
+            font-size: 14px;
+            color: #2c3e50;
+            margin: 0;
+        }
+        .tag-bar-clear {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .tag-bar-clear:hover {
+            background: #c0392b;
+        }
+        .tag-bar-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .tag-button {
+            background: #ecf0f1;
+            color: #2c3e50;
+            border: 2px solid #bdc3c7;
+            padding: 6px 12px;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .tag-button:hover {
+            background: #d5dbdb;
+        }
+        .tag-button.active {
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
         /* Image Modal */
         .image-modal {
             display: none;
@@ -364,35 +429,66 @@ def index():
             background: white;
             padding: 15px;
             border-radius: 8px;
-            min-width: 400px;
+            min-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
         .image-modal-editor label {
-            display: block;
-            margin-bottom: 8px;
             font-weight: 500;
             color: #2c3e50;
+            font-size: 14px;
         }
-        .image-modal-editor textarea {
+        .modal-tags-container {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 2px solid #bdc3c7;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-height: 50px;
+        }
+        .modal-tags-container.empty {
+            align-items: center;
+            justify-content: center;
+            color: #95a5a6;
+            font-style: italic;
+            font-size: 13px;
+        }
+        .modal-tag-button {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .modal-tag-button:hover {
+            background: #c8e6c9;
+        }
+        .modal-tag-button .remove {
+            margin-left: 5px;
+            font-weight: bold;
+        }
+        .image-modal-input {
             width: 100%;
             padding: 10px;
             border: 2px solid #bdc3c7;
             border-radius: 4px;
             font-family: inherit;
             font-size: 14px;
-            line-height: 1.5;
-            resize: vertical;
-            min-height: 4.5em;
-            max-height: 200px;
-            overflow-y: auto;
-            word-wrap: break-word;
-            white-space: pre-wrap;
+            box-sizing: border-box;
         }
-        .image-modal-editor textarea:focus {
+        .image-modal-input:focus {
             outline: none;
             border-color: #3498db;
         }
         .image-modal-hint {
-            margin-top: 8px;
             font-size: 12px;
             color: #7f8c8d;
         }
@@ -516,9 +612,13 @@ def index():
         <div class="image-modal-content">
             <img class="image-modal-image" id="modalImage" src="" alt="">
             <div class="image-modal-editor">
-                <label for="modalTagsInput">Tags (comma separated):</label>
-                <textarea id="modalTagsInput" rows="3"></textarea>
-                <div class="image-modal-hint">Press Enter to save, Escape to cancel</div>
+                <label>Current Tags:</label>
+                <div class="modal-tags-container" id="modalTagsContainer">
+                    <span>No tags</span>
+                </div>
+                <label for="modalTagInput">Add/Remove Tags:</label>
+                <input type="text" id="modalTagInput" class="image-modal-input" placeholder="Type tag name and press Enter...">
+                <div class="image-modal-hint">Click tags to remove • Type to add • Enter to save • Escape to cancel</div>
             </div>
         </div>
     </div>
@@ -540,7 +640,7 @@ def index():
                 <option value="AND">AND</option>
                 <option value="OR">OR</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search tags (comma separated)">
+            <button onclick="toggleTagBar()">🏷️ Tags</button>
             <select id="sortSelect">
                 <option value="name_asc">Name (ascending)</option>
                 <option value="name_desc">Name (descending)</option>
@@ -551,6 +651,19 @@ def index():
             </select>
             <button onclick="loadImages()">Load</button>
             <button onclick="refreshAll()">Refresh All</button>
+        </div>
+    </div>
+
+    <!-- Tag Bar -->
+    <div class="tag-bar" id="tagBar">
+        <div class="tag-bar-content">
+            <div class="tag-bar-header">
+                <h3>Filter by Tags (<span id="tagCount">0</span> tags found):</h3>
+                <button class="tag-bar-clear" onclick="clearSelectedTags()">Clear Selection</button>
+            </div>
+            <div class="tag-bar-tags" id="tagBarTags">
+                <span style="color: #95a5a6; font-style: italic;">Load a folder to see tags...</span>
+            </div>
         </div>
     </div>
 
@@ -565,6 +678,9 @@ def index():
     <script>
         let selectedFolder = '';
         let folderData = [];
+        let allImages = [];
+        let selectedTags = new Set();
+        let allTags = new Set();
 
         // Load folder tree on page load
         fetch('/api/folders')
@@ -666,11 +782,22 @@ def index():
             }
         });
 
+        function toggleTagBar() {
+            const tagBar = document.getElementById('tagBar');
+            tagBar.classList.toggle('visible');
+        }
+
+        function clearSelectedTags() {
+            selectedTags.clear();
+            document.querySelectorAll('.tag-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            filterImages();
+        }
+
         function loadImages() {
             const folder = selectedFolder;
             const recursive = document.getElementById('recursiveToggle').checked;
-            const search = document.getElementById('searchInput').value;
-            const searchMode = document.getElementById('searchMode').value;
             const sort = document.getElementById('sortSelect').value;
 
             if (!folder) {
@@ -678,30 +805,112 @@ def index():
                 return;
             }
 
+            // Clear selected tags
+            selectedTags.clear();
+
             document.getElementById('stats').style.display = 'block';
             document.getElementById('statusText').textContent = 'Loading...';
             document.getElementById('gallery').innerHTML = '<div class="loading">Loading images...</div>';
 
+            // Load images without search filter to get all images and tags
             const params = new URLSearchParams({
                 folder: folder,
                 recursive: recursive ? '1' : '0',
-                search: search,
-                search_mode: searchMode,
                 sort: sort
             });
 
             fetch('/api/images?' + params)
                 .then(res => res.json())
                 .then(data => {
+                    allImages = data.images;
+
+                    // Extract all unique tags
+                    allTags.clear();
+                    allImages.forEach(img => {
+                        if (img.tags) {
+                            const tags = img.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+                            tags.forEach(tag => allTags.add(tag));
+                        }
+                    });
+
+                    // Update tag bar
+                    buildTagBar();
+
                     document.getElementById('statusText').textContent =
-                        `Found ${data.images.length} image(s) in ${folder}`;
-                    displayImages(data.images);
+                        `Found ${allImages.length} image(s) in ${folder}`;
+
+                    // Display all images initially
+                    displayImages(allImages);
                 })
                 .catch(err => {
                     console.error('Error loading images:', err);
                     document.getElementById('gallery').innerHTML =
                         '<div class="loading">Error loading images</div>';
                 });
+        }
+
+        function buildTagBar() {
+            const tagBarTags = document.getElementById('tagBarTags');
+            const tagCount = document.getElementById('tagCount');
+
+            tagBarTags.innerHTML = '';
+            tagCount.textContent = allTags.size;
+
+            if (allTags.size === 0) {
+                tagBarTags.innerHTML = '<span style="color: #95a5a6; font-style: italic;">No tags found</span>';
+                return;
+            }
+
+            // Sort tags alphabetically
+            const sortedTags = Array.from(allTags).sort();
+
+            sortedTags.forEach(tag => {
+                const btn = document.createElement('button');
+                btn.className = 'tag-button';
+                btn.textContent = tag;
+                btn.onclick = () => toggleTag(tag, btn);
+                tagBarTags.appendChild(btn);
+            });
+        }
+
+        function toggleTag(tag, button) {
+            if (selectedTags.has(tag)) {
+                selectedTags.delete(tag);
+                button.classList.remove('active');
+            } else {
+                selectedTags.add(tag);
+                button.classList.add('active');
+            }
+            filterImages();
+        }
+
+        function filterImages() {
+            if (selectedTags.size === 0) {
+                // Show all images
+                displayImages(allImages);
+                return;
+            }
+
+            const searchMode = document.getElementById('searchMode').value;
+            const filtered = allImages.filter(img => {
+                if (!img.tags) return false;
+
+                const imageTags = new Set(
+                    img.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
+                );
+
+                if (searchMode === 'OR') {
+                    // OR: Match if any selected tag is present
+                    return Array.from(selectedTags).some(tag => imageTags.has(tag));
+                } else {
+                    // AND: Match if all selected tags are present
+                    return Array.from(selectedTags).every(tag => imageTags.has(tag));
+                }
+            });
+
+            displayImages(filtered);
+            document.getElementById('statusText').textContent =
+                `Found ${filtered.length} of ${allImages.length} image(s) matching filter`;
         }
 
         function displayImages(images) {
@@ -787,34 +996,88 @@ def index():
 
         // Image Modal Functions
         let currentImagePath = '';
-        let originalTags = '';
+        let currentImageTags = new Set();
+        let originalTagsString = '';
 
         function openImageModal(path, name, tags) {
             currentImagePath = path;
-            originalTags = tags || '';
+            originalTagsString = tags || '';
+
+            // Parse current tags
+            currentImageTags.clear();
+            if (tags) {
+                tags.split(',').map(t => t.trim()).filter(t => t).forEach(tag => {
+                    currentImageTags.add(tag);
+                });
+            }
 
             // Set image source
             document.getElementById('modalImage').src = '/image?path=' + encodeURIComponent(path);
             document.getElementById('modalImage').alt = name;
 
-            // Set tags input
-            const tagsInput = document.getElementById('modalTagsInput');
-            tagsInput.value = originalTags;
+            // Render tags
+            renderModalTags();
+
+            // Clear and focus input
+            const input = document.getElementById('modalTagInput');
+            input.value = '';
 
             // Show modal
             document.getElementById('imageModal').classList.add('active');
 
-            // Focus on input after a short delay to ensure modal is visible
+            // Focus on input after a short delay
             setTimeout(() => {
-                tagsInput.focus();
-                tagsInput.setSelectionRange(tagsInput.value.length, tagsInput.value.length);
+                input.focus();
             }, 100);
+        }
+
+        function renderModalTags() {
+            const container = document.getElementById('modalTagsContainer');
+            container.innerHTML = '';
+
+            if (currentImageTags.size === 0) {
+                container.classList.add('empty');
+                container.innerHTML = '<span>No tags</span>';
+                return;
+            }
+
+            container.classList.remove('empty');
+
+            // Sort tags alphabetically
+            const sortedTags = Array.from(currentImageTags).sort();
+
+            sortedTags.forEach(tag => {
+                const btn = document.createElement('button');
+                btn.className = 'modal-tag-button';
+                btn.innerHTML = `${escapeHtml(tag)}<span class="remove">×</span>`;
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    removeModalTag(tag);
+                    // Refocus input
+                    document.getElementById('modalTagInput').focus();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function removeModalTag(tag) {
+            currentImageTags.delete(tag);
+            renderModalTags();
+        }
+
+        function addModalTag(tag) {
+            tag = tag.trim();
+            if (tag) {
+                currentImageTags.add(tag);
+                renderModalTags();
+            }
         }
 
         function closeImageModal(saved = false) {
             document.getElementById('imageModal').classList.remove('active');
             currentImagePath = '';
-            originalTags = '';
+            currentImageTags.clear();
+            originalTagsString = '';
 
             if (saved) {
                 showToast('Edited', 'success');
@@ -824,10 +1087,11 @@ def index():
         }
 
         async function saveImageTags() {
-            const newTags = document.getElementById('modalTagsInput').value.trim();
+            // Convert tags set to comma-separated string
+            const newTags = Array.from(currentImageTags).join(', ');
 
             // Check if tags changed
-            if (newTags === originalTags) {
+            if (newTags === originalTagsString) {
                 closeImageModal(false);
                 return;
             }
@@ -875,14 +1139,33 @@ def index():
             }, 2000);
         }
 
-        // Modal keyboard handlers
-        document.getElementById('modalTagsInput').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        // Modal input handlers
+        const modalInput = document.getElementById('modalTagInput');
+
+        modalInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
                 e.preventDefault();
-                saveImageTags();
+                const value = this.value.trim();
+                if (value) {
+                    // Add tag
+                    addModalTag(value);
+                    this.value = '';
+                } else {
+                    // Empty input, save and close
+                    saveImageTags();
+                }
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 closeImageModal(false);
+            }
+        });
+
+        // Prevent clicks on modal content from bubbling
+        document.querySelector('.image-modal-content').addEventListener('click', function(e) {
+            e.stopPropagation();
+            // Refocus input if it's not already focused
+            if (document.activeElement !== modalInput) {
+                modalInput.focus();
             }
         });
 
@@ -890,13 +1173,6 @@ def index():
         document.getElementById('imageModal').addEventListener('click', function(e) {
             if (e.target.id === 'imageModal') {
                 closeImageModal(false);
-            }
-        });
-
-        // Allow Enter key to trigger search
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                loadImages();
             }
         });
     </script>
