@@ -127,28 +127,32 @@
 
     <!-- Image Details Modal -->
     <div id="imageModal" class="modal" style="display: none;">
-        <div class="modal-content image-modal-content">
+        <div class="modal-content modal-large">
             <div class="modal-header">
                 <h2 id="imageModalTitle">Image Details</h2>
                 <button class="modal-close" onclick="closeImageModal()">&times;</button>
             </div>
-            <div class="modal-body image-modal-editor">
-                <div id="modalImageContainer" class="modal-image-container">
-                    <div id="modalImage" class="modal-image-panel">
-                        <button class="nav-arrow nav-arrow-left" onclick="navigateModalImage(-1)">&lsaquo;</button>
-                        <img id="imageModalPreview" src="" alt="Image preview">
-                        <button class="nav-arrow nav-arrow-right" onclick="navigateModalImage(1)">&rsaquo;</button>
-                        <div id="imageDots" class="image-dots"></div>
-                    </div>
+            <div class="modal-body image-details-body">
+                <div class="image-preview">
+                    <img id="imageModalPreview" src="" alt="Image preview">
                 </div>
-                <div id="modalTagsContainer" class="modal-tags-container">
-                    <div id="modalTagsList" class="modal-tags-list">
-                        <!-- Tags will be added here dynamically -->
+                <div class="image-details-form">
+                    <label for="imageTagsInput">Tags:</label>
+                    <textarea
+                        id="imageTagsInput"
+                        placeholder="Enter tags (comma separated)"
+                        rows="4"
+                    ></textarea>
+                    <div class="image-info">
+                        <p><strong>File:</strong> <span id="imageFileName"></span></p>
+                        <p><strong>Path:</strong> <span id="imageFilePath"></span></p>
+                        <p><strong>Size:</strong> <span id="imageFileSize"></span></p>
+                        <p><strong>Modified:</strong> <span id="imageFileModified"></span></p>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-primary" onclick="saveImageTags()">Save</button>
+                <button class="btn btn-primary" onclick="saveImageTags()">Save Tags</button>
                 <button class="btn" onclick="closeImageModal()">Cancel</button>
             </div>
         </div>

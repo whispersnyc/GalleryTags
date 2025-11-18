@@ -7,29 +7,9 @@ let selectedImages = new Set();
 let isDragging = false;
 let dragStartIndex = null;
 let currentImageForEdit = null;
-let modalImages = []; // Images being edited in modal
-let currentModalIndex = 0; // Current image index in modal
-let modalImageTags = new Map(); // Track tag changes for each image in modal
-let availableTags = []; // All tags currently in use across images
 
 // API Base URL
 const API_BASE = '';
-
-// Utility: Calculate all unique tags currently in use across all images
-function recalculateAvailableTags() {
-    const tagSet = new Set();
-    allImages.forEach(image => {
-        if (image.tags) {
-            image.tags.split(',').forEach(tag => {
-                const trimmedTag = tag.trim();
-                if (trimmedTag) {
-                    tagSet.add(trimmedTag);
-                }
-            });
-        }
-    });
-    availableTags = Array.from(tagSet).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-}
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -215,9 +195,6 @@ async function loadImages(forceRefresh = false) {
 
         const data = await response.json();
         allImages = data.images;
-
-        // Recalculate available tags after loading images
-        recalculateAvailableTags();
 
         renderGallery();
         updateImageCount();
@@ -476,9 +453,6 @@ async function applyBatchTags() {
             }
         });
 
-        // Recalculate available tags
-        recalculateAvailableTags();
-
         // Re-render gallery
         renderGallery();
         hideBatchTagEditor();
@@ -496,268 +470,62 @@ function cancelBatchEdit() {
     clearSelection();
 }
 
-// Show image details modal (Enhanced)
+// Show image details modal
 function showImageDetails(image) {
-    // Recalculate available tags before opening modal
-    recalculateAvailableTags();
+    currentImageForEdit = image;
 
-    // Determine which images to show in modal
-    if (selectedImages.size > 0) {
-        // If images are selected, show all selected images
-        modalImages = Array.from(selectedImages).map(index => allImages[index]);
-        // Find the index of the clicked image
-        const clickedIndex = allImages.indexOf(image);
-        currentModalIndex = modalImages.findIndex(img => allImages.indexOf(img) === clickedIndex);
-        if (currentModalIndex === -1) currentModalIndex = 0;
-    } else {
-        // Single image mode
-        modalImages = [image];
-        currentModalIndex = 0;
-    }
+    document.getElementById('imageModalTitle').textContent = image.name;
+    document.getElementById('imageFileName').textContent = image.name;
+    document.getElementById('imageFilePath').textContent = image.path;
+    document.getElementById('imageFileSize').textContent = formatFileSize(image.size);
+    document.getElementById('imageFileModified').textContent = new Date(image.modified * 1000).toLocaleString();
+    document.getElementById('imageTagsInput').value = image.tags || '';
 
-    // Initialize tag tracking for each image
-    modalImageTags.clear();
-    modalImages.forEach(img => {
-        const tags = img.tags ? img.tags.split(',').map(t => t.trim()).filter(t => t) : [];
-        modalImageTags.set(img.path, new Set(tags));
-    });
-
-    // Render modal
-    renderModalImage();
-    renderModalTags();
-    updateNavigationControls();
-
-    document.getElementById('imageModal').style.display = 'flex';
-}
-
-// Render current modal image
-function renderModalImage() {
-    const image = modalImages[currentModalIndex];
-    document.getElementById('imageModalTitle').textContent =
-        modalImages.length > 1 ?
-        `${image.name} (${currentModalIndex + 1}/${modalImages.length})` :
-        image.name;
-
+    // Set preview image
     const fullImageUrl = `${API_BASE}/api/image/full/${encodeURIComponent(image.path)}`;
     document.getElementById('imageModalPreview').src = fullImageUrl;
-}
 
-// Render modal tags panel
-function renderModalTags() {
-    const tagsList = document.getElementById('modalTagsList');
-    tagsList.innerHTML = '';
-
-    const currentImage = modalImages[currentModalIndex];
-    const currentTags = modalImageTags.get(currentImage.path);
-
-    // Render each available tag
-    availableTags.forEach(tag => {
-        const tagElement = createModalTagElement(tag, currentTags.has(tag));
-        tagsList.appendChild(tagElement);
-    });
-
-    // Add "+ Add New" button
-    const addButton = document.createElement('div');
-    addButton.className = 'modal-tag add-new-tag';
-    addButton.innerHTML = '<span class="tag-name">+ Add New</span>';
-    addButton.onclick = addNewTag;
-    tagsList.appendChild(addButton);
-}
-
-// Create a modal tag element
-function createModalTagElement(tagName, isActive) {
-    const tagElement = document.createElement('div');
-    tagElement.className = `modal-tag ${isActive ? 'active' : ''}`;
-    tagElement.dataset.tag = tagName;
-
-    tagElement.innerHTML = `
-        <span class="tag-name">${tagName}</span>
-        <span class="tag-reset">Right-click to reset</span>
-    `;
-
-    // Click to toggle tag
-    tagElement.onclick = (e) => {
-        e.preventDefault();
-        toggleModalTag(tagName);
-    };
-
-    // Right-click to reset tag across all modal images
-    tagElement.oncontextmenu = (e) => {
-        e.preventDefault();
-        resetModalTag(tagName);
-    };
-
-    // Touch-hold for mobile (750ms hold)
-    let touchTimer;
-    tagElement.addEventListener('touchstart', (e) => {
-        touchTimer = setTimeout(() => {
-            resetModalTag(tagName);
-            // Provide haptic feedback if available
-            if (navigator.vibrate) {
-                navigator.vibrate(50);
-            }
-        }, 750);
-    });
-
-    tagElement.addEventListener('touchend', () => {
-        if (touchTimer) {
-            clearTimeout(touchTimer);
-        }
-    });
-
-    tagElement.addEventListener('touchmove', () => {
-        if (touchTimer) {
-            clearTimeout(touchTimer);
-        }
-    });
-
-    return tagElement;
-}
-
-// Toggle tag for current image
-function toggleModalTag(tagName) {
-    const currentImage = modalImages[currentModalIndex];
-    const tags = modalImageTags.get(currentImage.path);
-
-    if (tags.has(tagName)) {
-        tags.delete(tagName);
-    } else {
-        tags.add(tagName);
-    }
-
-    renderModalTags();
-}
-
-// Reset tag (remove from all images in modal)
-function resetModalTag(tagName) {
-    modalImages.forEach(img => {
-        const tags = modalImageTags.get(img.path);
-        tags.delete(tagName);
-    });
-
-    renderModalTags();
-}
-
-// Add new tag via prompt
-function addNewTag() {
-    const newTag = prompt('Enter new tag name:');
-    if (newTag && newTag.trim()) {
-        const tagName = newTag.trim();
-
-        // Add to current image
-        const currentImage = modalImages[currentModalIndex];
-        const tags = modalImageTags.get(currentImage.path);
-        tags.add(tagName);
-
-        // Add to available tags if not already there
-        if (!availableTags.includes(tagName)) {
-            availableTags.push(tagName);
-            availableTags.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        }
-
-        renderModalTags();
-    }
-}
-
-// Navigate between images in modal
-function navigateModalImage(direction) {
-    if (modalImages.length <= 1) return;
-
-    currentModalIndex = (currentModalIndex + direction + modalImages.length) % modalImages.length;
-    renderModalImage();
-    renderModalTags();
-    updateNavigationControls();
-}
-
-// Update navigation arrows and dots
-function updateNavigationControls() {
-    const dotsContainer = document.getElementById('imageDots');
-    const arrows = document.querySelectorAll('.nav-arrow');
-
-    if (modalImages.length <= 1) {
-        dotsContainer.innerHTML = '';
-        arrows.forEach(arrow => arrow.style.display = 'none');
-        return;
-    }
-
-    // Show arrows
-    arrows.forEach(arrow => arrow.style.display = '');
-
-    // Render dots
-    dotsContainer.innerHTML = '';
-    modalImages.forEach((img, index) => {
-        const dot = document.createElement('div');
-        dot.className = `image-dot ${index === currentModalIndex ? 'active' : ''}`;
-        dot.onclick = () => {
-            currentModalIndex = index;
-            renderModalImage();
-            renderModalTags();
-            updateNavigationControls();
-        };
-        dotsContainer.appendChild(dot);
-    });
+    document.getElementById('imageModal').style.display = 'flex';
 }
 
 // Close image details modal
 function closeImageModal() {
     document.getElementById('imageModal').style.display = 'none';
-    modalImages = [];
-    currentModalIndex = 0;
-    modalImageTags.clear();
-
-    // Recalculate available tags to remove unused ones
-    recalculateAvailableTags();
+    currentImageForEdit = null;
 }
 
 // Save image tags
 async function saveImageTags() {
-    if (modalImages.length === 0) return;
+    if (!currentImageForEdit) return;
+
+    const tagsInput = document.getElementById('imageTagsInput').value.trim();
 
     showLoading('Saving tags...');
 
     try {
-        // Prepare updates for all images
-        const updates = modalImages.map(img => {
-            const tags = Array.from(modalImageTags.get(img.path)).join(', ');
-            return { path: img.path, tags };
+        const response = await fetch(`${API_BASE}/api/image/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                images: [currentImageForEdit.path],
+                tags: tagsInput
+            })
         });
 
-        // Save each image
-        const promises = updates.map(update =>
-            fetch(`${API_BASE}/api/image/tags`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    images: [update.path],
-                    tags: update.tags
-                })
-            })
-        );
-
-        const responses = await Promise.all(promises);
-
-        // Check all responses
-        for (let i = 0; i < responses.length; i++) {
-            if (!responses[i].ok) {
-                throw new Error(`Failed to save tags for ${updates[i].path}`);
-            }
-
-            const data = await responses[i].json();
-            if (data.results[0].success) {
-                // Update local image data
-                const image = allImages.find(img => img.path === updates[i].path);
-                if (image) {
-                    image.tags = data.results[0].tags;
-                }
-            }
+        if (!response.ok) {
+            throw new Error('Failed to save tags');
         }
 
-        // Recalculate available tags to remove any unused tags
-        recalculateAvailableTags();
+        const data = await response.json();
 
-        // Re-render gallery
-        renderGallery();
-        closeImageModal();
+        if (data.results[0].success) {
+            currentImageForEdit.tags = data.results[0].tags;
+            renderGallery();
+            closeImageModal();
+        } else {
+            throw new Error(data.results[0].error);
+        }
+
         hideLoading();
     } catch (error) {
         hideLoading();
