@@ -291,6 +291,33 @@ def index():
         .folder-popup-close:hover {
             background: #c0392b;
         }
+        .folder-popup-footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 2px solid #ecf0f1;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        .folder-popup-footer label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #2c3e50;
+        }
+        .folder-popup-footer button {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .folder-popup-footer button:hover {
+            background: #229954;
+        }
         .folder-tree {
             list-style: none;
             padding-left: 0;
@@ -489,6 +516,11 @@ def index():
             color: #2e7d32;
             border-color: #81c784;
         }
+        .modal-tag-button.partial {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-color: #64b5f6;
+        }
         .image-modal-input {
             width: 100%;
             padding: 10px;
@@ -561,6 +593,10 @@ def index():
             transform: translateY(-4px);
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
         }
+        .image-card.selected {
+            box-shadow: 0 0 0 3px #3498db;
+            transform: translateY(-2px);
+        }
         .image-wrapper {
             width: 100%;
             height: 250px;
@@ -618,6 +654,13 @@ def index():
                 <button class="folder-popup-close" onclick="closeFolderPopup()">Close</button>
             </div>
             <ul class="folder-tree" id="folderTree"></ul>
+            <div class="folder-popup-footer">
+                <label>
+                    <input type="checkbox" id="recursiveToggle">
+                    Recursive
+                </label>
+                <button onclick="loadImagesAndClose()">Load</button>
+            </div>
         </div>
     </div>
 
@@ -642,14 +685,9 @@ def index():
 
     <div class="toolbar">
         <div class="toolbar-content">
-            <h1>Gallery Tags</h1>
             <button class="folder-btn" id="folderBtn" onclick="openFolderPopup()">
                 📁 <span id="selectedFolderText">Select a folder...</span>
             </button>
-            <label>
-                <input type="checkbox" id="recursiveToggle">
-                Recursive
-            </label>
             <button onclick="toggleTagBar()">🏷️ Tags</button>
             <select id="sortSelect">
                 <option value="name_asc">Name (ascending)</option>
@@ -659,7 +697,6 @@ def index():
                 <option value="tags_asc">Tags (ascending)</option>
                 <option value="tags_desc">Tags (descending)</option>
             </select>
-            <button onclick="loadImages()">Load</button>
             <button onclick="refreshAll()">Refresh All</button>
         </div>
     </div>
@@ -697,6 +734,9 @@ def index():
         let allImages = [];
         let selectedTags = new Set();
         let allTags = new Set();
+        let selectedImageCards = new Set();
+        let isMultiEditMode = false;
+        let multiEditImages = [];
 
         // Load folder tree on page load
         fetch('/api/folders')
@@ -789,6 +829,11 @@ def index():
 
         function closeFolderPopup() {
             document.getElementById('folderPopup').classList.remove('active');
+        }
+
+        function loadImagesAndClose() {
+            loadImages();
+            closeFolderPopup();
         }
 
         // Close popup when clicking outside
@@ -938,10 +983,15 @@ def index():
             }
 
             gallery.innerHTML = '';
+            selectedImageCards.clear();
+
             images.forEach(img => {
                 const card = document.createElement('div');
                 card.className = 'image-card';
                 card.style.cursor = 'pointer';
+                card.dataset.path = img.path;
+                card.dataset.name = img.name;
+                card.dataset.tags = img.tags || '';
 
                 const tags = img.tags ? img.tags.split(',').map(t => t.trim()).filter(t => t) : [];
                 const tagsHtml = tags.length > 0
@@ -960,13 +1010,63 @@ def index():
                     </div>
                 `;
 
-                // Add click handler to open modal
-                card.addEventListener('click', () => {
-                    openImageModal(img.path, img.name, img.tags || '');
+                // Left-click handler
+                card.addEventListener('click', (e) => {
+                    handleImageLeftClick(card);
+                });
+
+                // Right-click handler
+                card.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    handleImageRightClick(card);
                 });
 
                 gallery.appendChild(card);
             });
+        }
+
+        function handleImageLeftClick(card) {
+            const isCardSelected = selectedImageCards.has(card);
+            const hasSelections = selectedImageCards.size > 0;
+
+            if (hasSelections) {
+                if (selectedImageCards.size === 1) {
+                    // One card selected, unselect and open modal for clicked card
+                    clearImageSelections();
+                    openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
+                } else if (selectedImageCards.size > 1) {
+                    if (isCardSelected) {
+                        // Multiple selected, clicked one is selected - open multi-edit
+                        openMultiEditModal();
+                    } else {
+                        // Multiple selected, clicked one not selected - clear and open single
+                        clearImageSelections();
+                        openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
+                    }
+                }
+            } else {
+                // No selections, open modal normally
+                openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
+            }
+        }
+
+        function handleImageRightClick(card) {
+            if (selectedImageCards.has(card)) {
+                // Unselect
+                selectedImageCards.delete(card);
+                card.classList.remove('selected');
+            } else {
+                // Select
+                selectedImageCards.add(card);
+                card.classList.add('selected');
+            }
+        }
+
+        function clearImageSelections() {
+            selectedImageCards.forEach(card => {
+                card.classList.remove('selected');
+            });
+            selectedImageCards.clear();
         }
 
         function refreshAll() {
@@ -1014,22 +1114,74 @@ def index():
         let currentImagePath = '';
         let currentImageTags = new Set();
         let originalTagsString = '';
+        let originalImageTags = new Set();
+        let tagStates = new Map(); // For multi-edit: 'all', 'some', 'none'
 
         function openImageModal(path, name, tags) {
+            isMultiEditMode = false;
             currentImagePath = path;
             originalTagsString = tags || '';
 
             // Parse current tags
             currentImageTags.clear();
+            originalImageTags.clear();
             if (tags) {
-                tags.split(',').map(t => t.trim()).filter(t => t).forEach(tag => {
+                tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t).forEach(tag => {
                     currentImageTags.add(tag);
+                    originalImageTags.add(tag);
                 });
             }
 
             // Set image source
             document.getElementById('modalImage').src = '/image?path=' + encodeURIComponent(path);
             document.getElementById('modalImage').alt = name;
+
+            // Render tags
+            renderModalTags();
+
+            // Clear and focus input
+            const input = document.getElementById('modalTagInput');
+            input.value = '';
+
+            // Show modal
+            document.getElementById('imageModal').classList.add('active');
+
+            // Focus on input after a short delay
+            setTimeout(() => {
+                input.focus();
+            }, 100);
+        }
+
+        function openMultiEditModal() {
+            isMultiEditMode = true;
+            multiEditImages = Array.from(selectedImageCards).map(card => ({
+                path: card.dataset.path,
+                name: card.dataset.name,
+                tags: card.dataset.tags || '',
+                originalTags: new Set((card.dataset.tags || '').split(',').map(t => t.trim().toLowerCase()).filter(t => t)),
+                currentTags: new Set((card.dataset.tags || '').split(',').map(t => t.trim().toLowerCase()).filter(t => t))
+            }));
+
+            // Calculate tag states (all/some/none)
+            tagStates.clear();
+            allTags.forEach(tag => {
+                let count = 0;
+                multiEditImages.forEach(img => {
+                    if (img.currentTags.has(tag)) count++;
+                });
+
+                if (count === multiEditImages.length) {
+                    tagStates.set(tag, 'all');
+                } else if (count > 0) {
+                    tagStates.set(tag, 'some');
+                } else {
+                    tagStates.set(tag, 'none');
+                }
+            });
+
+            // Set modal image to first selected
+            document.getElementById('modalImage').src = '/image?path=' + encodeURIComponent(multiEditImages[0].path);
+            document.getElementById('modalImage').alt = `Multi-edit (${multiEditImages.length} images)`;
 
             // Render tags
             renderModalTags();
@@ -1065,41 +1217,135 @@ def index():
             sortedTags.forEach(tag => {
                 const btn = document.createElement('button');
                 btn.className = 'modal-tag-button';
+                btn.dataset.tag = tag;
 
-                // Check if this tag is active for the current image
-                const isActive = currentImageTags.has(tag);
-                if (isActive) {
-                    btn.classList.add('active');
+                if (isMultiEditMode) {
+                    // Multi-edit mode: show all/some/none states
+                    const state = tagStates.get(tag) || 'none';
+                    if (state === 'all') {
+                        btn.classList.add('active');
+                    } else if (state === 'some') {
+                        btn.classList.add('partial');
+                    }
+                } else {
+                    // Single edit mode: show active/inactive
+                    const isActive = currentImageTags.has(tag);
+                    if (isActive) {
+                        btn.classList.add('active');
+                    }
                 }
 
                 btn.textContent = tag;
+
+                // Left-click to toggle
                 btn.onclick = (e) => {
                     e.preventDefault();
                     toggleModalTag(tag, btn);
                     // Refocus input
                     document.getElementById('modalTagInput').focus();
                 };
+
+                // Right-click to reset
+                btn.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    resetModalTag(tag, btn);
+                    // Refocus input
+                    document.getElementById('modalTagInput').focus();
+                };
+
                 container.appendChild(btn);
             });
         }
 
         function toggleModalTag(tag, button) {
-            if (currentImageTags.has(tag)) {
-                currentImageTags.delete(tag);
-                button.classList.remove('active');
+            if (isMultiEditMode) {
+                // Multi-edit mode
+                const currentState = tagStates.get(tag) || 'none';
+
+                if (currentState === 'all') {
+                    // Remove from all images
+                    multiEditImages.forEach(img => img.currentTags.delete(tag));
+                    tagStates.set(tag, 'none');
+                    button.classList.remove('active');
+                } else if (currentState === 'some') {
+                    // Add to all images
+                    multiEditImages.forEach(img => img.currentTags.add(tag));
+                    tagStates.set(tag, 'all');
+                    button.classList.remove('partial');
+                    button.classList.add('active');
+                } else {
+                    // Add to all images
+                    multiEditImages.forEach(img => img.currentTags.add(tag));
+                    tagStates.set(tag, 'all');
+                    button.classList.add('active');
+                }
             } else {
-                currentImageTags.add(tag);
-                button.classList.add('active');
+                // Single edit mode
+                if (currentImageTags.has(tag)) {
+                    currentImageTags.delete(tag);
+                    button.classList.remove('active');
+                } else {
+                    currentImageTags.add(tag);
+                    button.classList.add('active');
+                }
+            }
+        }
+
+        function resetModalTag(tag, button) {
+            if (isMultiEditMode) {
+                // Multi-edit mode: reset to original state
+                multiEditImages.forEach(img => {
+                    if (img.originalTags.has(tag)) {
+                        img.currentTags.add(tag);
+                    } else {
+                        img.currentTags.delete(tag);
+                    }
+                });
+
+                // Recalculate state for this tag
+                let count = 0;
+                multiEditImages.forEach(img => {
+                    if (img.currentTags.has(tag)) count++;
+                });
+
+                button.classList.remove('active', 'partial');
+
+                if (count === multiEditImages.length) {
+                    tagStates.set(tag, 'all');
+                    button.classList.add('active');
+                } else if (count > 0) {
+                    tagStates.set(tag, 'some');
+                    button.classList.add('partial');
+                } else {
+                    tagStates.set(tag, 'none');
+                }
+            } else {
+                // Single edit mode: reset to original
+                if (originalImageTags.has(tag)) {
+                    currentImageTags.add(tag);
+                    button.classList.add('active');
+                } else {
+                    currentImageTags.delete(tag);
+                    button.classList.remove('active');
+                }
             }
         }
 
         function addModalTag(tag) {
             tag = tag.trim().toLowerCase();
             if (tag) {
-                // Add to current image tags
-                currentImageTags.add(tag);
+                if (isMultiEditMode) {
+                    // Add to all images in multi-edit
+                    multiEditImages.forEach(img => img.currentTags.add(tag));
+                    tagStates.set(tag, 'all');
+                } else {
+                    // Add to current image tags
+                    currentImageTags.add(tag);
+                }
+
                 // Add to all tags if new
                 allTags.add(tag);
+
                 // Re-render to show the new tag
                 renderModalTags();
             }
@@ -1119,39 +1365,91 @@ def index():
         }
 
         async function saveImageTags() {
-            // Convert tags set to comma-separated string
-            const newTags = Array.from(currentImageTags).join(', ');
+            if (isMultiEditMode) {
+                // Multi-edit mode: save all images
+                let allSuccess = true;
+                let savedCount = 0;
 
-            // Check if tags changed
-            if (newTags === originalTagsString) {
-                closeImageModal(false);
-                return;
-            }
+                for (const img of multiEditImages) {
+                    const newTags = Array.from(img.currentTags).join(', ');
+                    const originalTags = Array.from(img.originalTags).join(', ');
 
-            try {
-                const response = await fetch('/api/tags', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        path: currentImagePath,
-                        tags: newTags
-                    })
-                });
+                    // Skip if no changes
+                    if (newTags === originalTags) {
+                        continue;
+                    }
 
-                const data = await response.json();
+                    try {
+                        const response = await fetch('/api/tags', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                path: img.path,
+                                tags: newTags
+                            })
+                        });
 
-                if (response.ok && data.success) {
-                    closeImageModal(true);
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            savedCount++;
+                        } else {
+                            allSuccess = false;
+                            console.error('Error saving tags for', img.path, data.error);
+                        }
+                    } catch (err) {
+                        allSuccess = false;
+                        console.error('Error saving tags for', img.path, err);
+                    }
+                }
+
+                closeImageModal(savedCount > 0);
+
+                if (savedCount > 0) {
                     // Reload images to show updated tags
                     loadImages();
-                } else {
-                    alert('Error saving tags: ' + (data.error || 'Unknown error'));
                 }
-            } catch (err) {
-                console.error('Error saving tags:', err);
-                alert('Error saving tags: ' + err.message);
+
+                if (!allSuccess) {
+                    alert(`Some images failed to save. ${savedCount} of ${multiEditImages.length} saved successfully.`);
+                }
+            } else {
+                // Single edit mode
+                const newTags = Array.from(currentImageTags).join(', ');
+
+                // Check if tags changed
+                if (newTags === originalTagsString) {
+                    closeImageModal(false);
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/tags', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            path: currentImagePath,
+                            tags: newTags
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        closeImageModal(true);
+                        // Reload images to show updated tags
+                        loadImages();
+                    } else {
+                        alert('Error saving tags: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (err) {
+                    console.error('Error saving tags:', err);
+                    alert('Error saving tags: ' + err.message);
+                }
             }
         }
 
