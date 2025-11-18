@@ -42,15 +42,34 @@ def get_folder_tree(path, prefix=""):
                 'name': subdir['name'],
                 'path': subdir['path'],
                 'relative': subdir['relative'],
-                'display_name': prefix + subdir['name']
+                'display_name': prefix + subdir['name'],
+                'children': []
             }
-            tree.append(item)
             # Recursively get subfolders
-            subtree = get_folder_tree(subdir['path'], prefix + "  ")
-            tree.extend(subtree)
+            item['children'] = get_folder_tree_nested(subdir['path'])
+            tree.append(item)
     except Exception as e:
         print(f"Error building tree for {path}: {e}")
     return tree
+
+def get_folder_tree_nested(path):
+    """Build a hierarchical nested folder tree"""
+    children = []
+    try:
+        subdirs = get_subdirectories(path)
+        for subdir in subdirs:
+            item = {
+                'name': subdir['name'],
+                'path': subdir['path'],
+                'relative': subdir['relative'],
+                'children': []
+            }
+            # Recursively get subfolders
+            item['children'] = get_folder_tree_nested(subdir['path'])
+            children.append(item)
+    except Exception as e:
+        print(f"Error building tree for {path}: {e}")
+    return children
 
 def get_images_in_folder(folder_path, recursive=False):
     """Get all supported images in a folder"""
@@ -89,27 +108,17 @@ def parse_tags(tag_string):
         return set()
     return {tag.strip().lower() for tag in tag_string.split(',') if tag.strip()}
 
-def filter_images_by_tags(images, search_query):
+def filter_images_by_tags(images, search_query, search_mode='AND'):
     """Filter images based on tag search query with AND/OR logic"""
     if not search_query or not search_query.strip():
         return images
 
-    # Determine if it's OR or AND mode
     query = search_query.strip()
-    is_or_mode = query.startswith('|')
-    is_and_mode = query.startswith('&')
-
-    # Remove operator prefix if present
-    if query.startswith('|') or query.startswith('&'):
-        query = query[1:].strip()
-
-    # If no prefix, default to AND mode
-    if not is_or_mode and not is_and_mode:
-        is_and_mode = True
-
     required_tags = parse_tags(query)
     if not required_tags:
         return images
+
+    is_or_mode = (search_mode == 'OR')
 
     filtered = []
     for image_path in images:
@@ -126,6 +135,35 @@ def filter_images_by_tags(images, search_query):
                 filtered.append(image_path)
 
     return filtered
+
+def sort_images(images, sort_option):
+    """Sort images based on sort option"""
+    if not images or not sort_option:
+        return images
+
+    # Extract sort criteria and direction
+    if sort_option.startswith('name_'):
+        # Sort by name
+        reverse = sort_option.endswith('_desc')
+        return sorted(images, key=lambda x: os.path.basename(x).lower(), reverse=reverse)
+    elif sort_option.startswith('modified_'):
+        # Sort by modification date
+        reverse = sort_option.endswith('_desc')
+        return sorted(images, key=lambda x: os.path.getmtime(x), reverse=reverse)
+    elif sort_option.startswith('tags_'):
+        # Sort by tags
+        reverse = sort_option.endswith('_desc')
+        # Split into tagged and untagged
+        tagged = [(img, get_tags_for_image(img)) for img in images if get_tags_for_image(img)]
+        untagged = [img for img in images if not get_tags_for_image(img)]
+
+        # Sort tagged items by tag text
+        tagged.sort(key=lambda x: x[1].lower(), reverse=reverse)
+
+        # Return combined list (untagged always at end)
+        return [img for img, _ in tagged] + untagged
+    else:
+        return images
 
 @app.route('/')
 def index():
@@ -170,7 +208,6 @@ def index():
             font-size: 14px;
         }
         .toolbar select {
-            min-width: 300px;
             background: white;
         }
         .toolbar input[type="text"] {
@@ -191,15 +228,106 @@ def index():
         .toolbar button:hover {
             background: #229954;
         }
+        .toolbar button.folder-btn {
+            background: #3498db;
+            min-width: 200px;
+            text-align: left;
+            position: relative;
+        }
+        .toolbar button.folder-btn:hover {
+            background: #2980b9;
+        }
         .toolbar label {
             display: flex;
             align-items: center;
             gap: 5px;
         }
-        .search-help {
-            font-size: 11px;
-            color: #bdc3c7;
-            margin-left: 5px;
+        /* Folder Tree Popup */
+        .folder-popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .folder-popup.active {
+            display: flex;
+        }
+        .folder-popup-content {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .folder-popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ecf0f1;
+        }
+        .folder-popup-header h2 {
+            font-size: 18px;
+            color: #2c3e50;
+        }
+        .folder-popup-close {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .folder-popup-close:hover {
+            background: #c0392b;
+        }
+        .folder-tree {
+            list-style: none;
+            padding-left: 0;
+        }
+        .folder-tree ul {
+            list-style: none;
+            padding-left: 20px;
+            display: none;
+        }
+        .folder-tree ul.expanded {
+            display: block;
+        }
+        .folder-item {
+            padding: 8px;
+            margin: 2px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .folder-item:hover {
+            background: #ecf0f1;
+        }
+        .folder-item.selected {
+            background: #3498db;
+            color: white;
+        }
+        .folder-toggle {
+            cursor: pointer;
+            user-select: none;
+            font-size: 12px;
+            width: 16px;
+            display: inline-block;
+        }
+        .folder-icon {
+            font-size: 16px;
         }
         .container {
             max-width: 1400px;
@@ -279,18 +407,40 @@ def index():
     </style>
 </head>
 <body>
+    <!-- Folder Tree Popup -->
+    <div class="folder-popup" id="folderPopup">
+        <div class="folder-popup-content">
+            <div class="folder-popup-header">
+                <h2>Select Folder</h2>
+                <button class="folder-popup-close" onclick="closeFolderPopup()">Close</button>
+            </div>
+            <ul class="folder-tree" id="folderTree"></ul>
+        </div>
+    </div>
+
     <div class="toolbar">
         <div class="toolbar-content">
             <h1>Gallery Tags</h1>
-            <select id="folderSelect">
-                <option value="">Select a folder...</option>
-            </select>
+            <button class="folder-btn" id="folderBtn" onclick="openFolderPopup()">
+                📁 <span id="selectedFolderText">Select a folder...</span>
+            </button>
             <label>
                 <input type="checkbox" id="recursiveToggle">
                 Recursive
             </label>
-            <input type="text" id="searchInput" placeholder="Search tags (prefix with | for OR, & for AND)">
-            <span class="search-help">e.g., "cat, dog" or "| cat, dog"</span>
+            <select id="searchMode">
+                <option value="AND">AND</option>
+                <option value="OR">OR</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Search tags (comma separated)">
+            <select id="sortSelect">
+                <option value="name_asc">Name (ascending)</option>
+                <option value="name_desc">Name (descending)</option>
+                <option value="modified_asc">Modified Date (ascending)</option>
+                <option value="modified_desc">Modified Date (descending)</option>
+                <option value="tags_asc">Tags (ascending)</option>
+                <option value="tags_desc">Tags (descending)</option>
+            </select>
             <button onclick="loadImages()">Load</button>
             <button onclick="refreshAll()">Refresh All</button>
         </div>
@@ -305,24 +455,115 @@ def index():
     </div>
 
     <script>
+        let selectedFolder = '';
+        let folderData = [];
+
         // Load folder tree on page load
         fetch('/api/folders')
             .then(res => res.json())
             .then(data => {
-                const select = document.getElementById('folderSelect');
-                data.folders.forEach(folder => {
-                    const option = document.createElement('option');
-                    option.value = folder.relative;
-                    option.textContent = folder.display_name;
-                    select.appendChild(option);
-                });
+                folderData = data.folders;
+                buildFolderTree(data.folders);
             })
             .catch(err => console.error('Error loading folders:', err));
 
+        function buildFolderTree(folders) {
+            const tree = document.getElementById('folderTree');
+            tree.innerHTML = '';
+
+            folders.forEach(folder => {
+                const li = createFolderItem(folder);
+                tree.appendChild(li);
+            });
+        }
+
+        function createFolderItem(folder) {
+            const li = document.createElement('li');
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'folder-item';
+            itemDiv.dataset.relative = folder.relative;
+
+            // Add toggle arrow if has children
+            const toggle = document.createElement('span');
+            toggle.className = 'folder-toggle';
+            if (folder.children && folder.children.length > 0) {
+                toggle.textContent = '▶';
+                toggle.onclick = (e) => {
+                    e.stopPropagation();
+                    const ul = li.querySelector('ul');
+                    if (ul) {
+                        ul.classList.toggle('expanded');
+                        toggle.textContent = ul.classList.contains('expanded') ? '▼' : '▶';
+                    }
+                };
+            } else {
+                toggle.textContent = ' ';
+            }
+            itemDiv.appendChild(toggle);
+
+            // Add folder icon and name
+            const icon = document.createElement('span');
+            icon.className = 'folder-icon';
+            icon.textContent = '📁';
+            itemDiv.appendChild(icon);
+
+            const name = document.createElement('span');
+            name.textContent = folder.name;
+            itemDiv.appendChild(name);
+
+            // Add click handler for selection
+            itemDiv.onclick = () => selectFolder(folder.relative, folder.name, itemDiv);
+
+            li.appendChild(itemDiv);
+
+            // Add children if present
+            if (folder.children && folder.children.length > 0) {
+                const ul = document.createElement('ul');
+                folder.children.forEach(child => {
+                    ul.appendChild(createFolderItem(child));
+                });
+                li.appendChild(ul);
+            }
+
+            return li;
+        }
+
+        function selectFolder(relative, name, element) {
+            // Remove previous selection
+            document.querySelectorAll('.folder-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            // Set new selection
+            element.classList.add('selected');
+            selectedFolder = relative;
+
+            // Update button text
+            document.getElementById('selectedFolderText').textContent = name;
+        }
+
+        function openFolderPopup() {
+            document.getElementById('folderPopup').classList.add('active');
+        }
+
+        function closeFolderPopup() {
+            document.getElementById('folderPopup').classList.remove('active');
+        }
+
+        // Close popup when clicking outside
+        document.getElementById('folderPopup').addEventListener('click', (e) => {
+            if (e.target.id === 'folderPopup') {
+                closeFolderPopup();
+            }
+        });
+
         function loadImages() {
-            const folder = document.getElementById('folderSelect').value;
+            const folder = selectedFolder;
             const recursive = document.getElementById('recursiveToggle').checked;
             const search = document.getElementById('searchInput').value;
+            const searchMode = document.getElementById('searchMode').value;
+            const sort = document.getElementById('sortSelect').value;
 
             if (!folder) {
                 alert('Please select a folder first');
@@ -336,7 +577,9 @@ def index():
             const params = new URLSearchParams({
                 folder: folder,
                 recursive: recursive ? '1' : '0',
-                search: search
+                search: search,
+                search_mode: searchMode,
+                sort: sort
             });
 
             fetch('/api/images?' + params)
@@ -388,7 +631,7 @@ def index():
         }
 
         function refreshAll() {
-            const folder = document.getElementById('folderSelect').value;
+            const folder = selectedFolder;
             const recursive = document.getElementById('recursiveToggle').checked;
 
             if (!folder) {
@@ -453,12 +696,14 @@ def api_folders():
 
 @app.route('/api/images')
 def api_images():
-    """Get images in a folder with optional search"""
+    """Get images in a folder with optional search and sorting"""
     response.content_type = 'application/json'
 
     folder_rel = request.query.get('folder', '')
     recursive = request.query.get('recursive', '0') == '1'
     search_query = request.query.get('search', '')
+    search_mode = request.query.get('search_mode', 'AND')
+    sort_option = request.query.get('sort', '')
 
     if not folder_rel:
         return json.dumps({'error': 'No folder specified', 'images': []})
@@ -472,7 +717,11 @@ def api_images():
 
     # Filter by search query if provided
     if search_query:
-        images = filter_images_by_tags(images, search_query)
+        images = filter_images_by_tags(images, search_query, search_mode)
+
+    # Sort images if sort option provided
+    if sort_option:
+        images = sort_images(images, sort_option)
 
     # Build response with image info
     result = []
