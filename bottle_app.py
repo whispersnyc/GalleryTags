@@ -481,7 +481,7 @@ def index():
             align-items: center;
             justify-content: center;
             flex-direction: column;
-            padding: 20px;
+            padding: 0;
         }
         .image-modal.active {
             display: flex;
@@ -489,31 +489,44 @@ def index():
         .image-modal-content {
             display: flex;
             flex-direction: column;
-            max-width: 90vw;
-            max-height: 90vh;
-            gap: 15px;
+            width: 100%;
+            height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
+            gap: 0;
+        }
+        .image-modal-image-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+            cursor: pointer;
         }
         .image-modal-image {
-            max-width: 100%;
-            max-height: 70vh;
+            max-width: 90vw;
+            max-height: 100%;
             object-fit: contain;
-            border-radius: 8px;
+            cursor: default;
         }
         .image-modal-editor {
             background: white;
             padding: 15px;
-            border-radius: 8px;
             min-width: 500px;
             max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
             display: flex;
             flex-direction: column;
-            flex: 1;
-            overflow: hidden;
+            height: 40vh;
+            min-height: 300px;
+            max-height: 400px;
         }
         .image-modal-editor label {
             font-weight: 500;
             color: #2c3e50;
             font-size: 14px;
+            margin-bottom: 8px;
         }
         .modal-tags-container {
             overflow-y: auto;
@@ -525,6 +538,7 @@ def index():
             gap: 6px;
             align-content: flex-start;
             flex: 1;
+            min-height: 0;
         }
         .modal-tags-container.empty {
             align-items: center;
@@ -582,6 +596,35 @@ def index():
         .image-modal-hint {
             font-size: 12px;
             color: #7f8c8d;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .modal-btn-cancel {
+            background: #95a5a6;
+            color: white;
+        }
+        .modal-btn-cancel:hover {
+            background: #7f8c8d;
+        }
+        .modal-btn-save {
+            background: #27ae60;
+            color: white;
+        }
+        .modal-btn-save:hover {
+            background: #229954;
         }
         /* Toast Notification */
         .toast {
@@ -746,10 +789,17 @@ def index():
     <!-- Image Modal -->
     <div class="image-modal" id="imageModal">
         <div class="image-modal-content">
-            <img class="image-modal-image" id="modalImage" src="" alt="">
+            <div class="image-modal-image-container" id="imageContainer">
+                <img class="image-modal-image" id="modalImage" src="" alt="">
+            </div>
             <div class="image-modal-editor">
+                <label>Tags:</label>
                 <div class="modal-tags-container" id="modalTagsContainer">
                     <span>No tags available</span>
+                </div>
+                <div class="modal-actions">
+                    <button class="modal-btn modal-btn-cancel" onclick="closeImageModal(false)">Cancel</button>
+                    <button class="modal-btn modal-btn-save" onclick="saveImageTags()">Save</button>
                 </div>
             </div>
         </div>
@@ -1640,6 +1690,13 @@ def index():
         // Close modal when clicking outside
         document.getElementById('imageModal').addEventListener('click', function(e) {
             if (e.target.id === 'imageModal') {
+                closeImageModal(false);
+            }
+        });
+
+        // Close modal when clicking on image container (but not the image itself)
+        document.getElementById('imageContainer').addEventListener('click', function(e) {
+            if (e.target.id === 'imageContainer') {
                 closeImageModal(false);
             }
         });
