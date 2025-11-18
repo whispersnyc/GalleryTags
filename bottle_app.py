@@ -396,6 +396,11 @@ def index():
             padding: 15px 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: none;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            z-index: 99;
         }
         .tag-bar.visible {
             display: block;
@@ -786,7 +791,6 @@ def index():
     <div class="toolbar">
         <div class="toolbar-content">
             <div class="toolbar-left">
-                <button class="select-btn" id="selectBtn" onclick="toggleSelectionMode()">Select</button>
                 <select id="sortSelect" onchange="applySorting()">
                     <option value="name_asc">Name (ascending)</option>
                     <option value="name_desc">Name (descending)</option>
@@ -802,6 +806,7 @@ def index():
                 </button>
             </div>
             <div class="toolbar-right">
+                <button class="select-btn" id="selectBtn" onclick="toggleSelectionMode()">Select</button>
                 <button onclick="toggleTagBar()">🏷️ Tags</button>
                 <button onclick="refreshAll()" title="Refresh All">🔄</button>
             </div>
@@ -1025,7 +1030,19 @@ def index():
             tagBarTags.innerHTML = '';
             tagCount.textContent = allTags.size;
 
-            if (allTags.size === 0) {
+            // Count untagged images
+            const untaggedCount = allImages.filter(img => !img.tags || img.tags.trim() === '').length;
+
+            // Add "Untagged" button first if there are untagged images
+            if (untaggedCount > 0) {
+                const untaggedBtn = document.createElement('button');
+                untaggedBtn.className = 'tag-button';
+                untaggedBtn.textContent = `Untagged (${untaggedCount})`;
+                untaggedBtn.onclick = () => toggleTag('__untagged__', untaggedBtn);
+                tagBarTags.appendChild(untaggedBtn);
+            }
+
+            if (allTags.size === 0 && untaggedCount === 0) {
                 tagBarTags.innerHTML = '<span style="color: #95a5a6; font-style: italic;">No tags found</span>';
                 return;
             }
@@ -1061,20 +1078,44 @@ def index():
             }
 
             const searchMode = document.getElementById('searchMode').value;
-            const filtered = allImages.filter(img => {
-                if (!img.tags) return false;
+            const hasUntagged = selectedTags.has('__untagged__');
+            const regularTags = Array.from(selectedTags).filter(tag => tag !== '__untagged__');
 
+            const filtered = allImages.filter(img => {
+                const isUntagged = !img.tags || img.tags.trim() === '';
+
+                // If image is untagged
+                if (isUntagged) {
+                    return hasUntagged;
+                }
+
+                // If only "untagged" is selected, exclude this tagged image
+                if (hasUntagged && regularTags.length === 0) {
+                    return false;
+                }
+
+                // Image has tags, check against regular tag filters
                 const imageTags = new Set(
                     img.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
                 );
 
-                if (searchMode === 'OR') {
-                    // OR: Match if any selected tag is present
-                    return Array.from(selectedTags).some(tag => imageTags.has(tag));
-                } else {
-                    // AND: Match if all selected tags are present
-                    return Array.from(selectedTags).every(tag => imageTags.has(tag));
+                let matchesRegularTags = false;
+                if (regularTags.length > 0) {
+                    if (searchMode === 'OR') {
+                        // OR: Match if any selected tag is present
+                        matchesRegularTags = regularTags.some(tag => imageTags.has(tag));
+                    } else {
+                        // AND: Match if all selected tags are present
+                        matchesRegularTags = regularTags.every(tag => imageTags.has(tag));
+                    }
                 }
+
+                // If "untagged" is selected with other tags in OR mode, include if matches any tag
+                if (hasUntagged && searchMode === 'OR') {
+                    return matchesRegularTags;
+                }
+
+                return matchesRegularTags;
             });
 
             displayImages(filtered);
