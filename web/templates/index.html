@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GalleryTags - Web UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header / Toolbar -->
+        <header class="toolbar">
+            <div class="toolbar-section">
+                <h1>GalleryTags</h1>
+                <button id="openFolderBtn" class="btn btn-primary" title="Open Folder (Ctrl+O)">
+                    📁 Open Folder
+                </button>
+                <span id="currentFolder" class="current-folder">No folder opened</span>
+            </div>
+            <div class="toolbar-section">
+                <button id="selectAllBtn" class="btn" title="Select All (Ctrl+A)">
+                    ☑ Select All
+                </button>
+                <button id="refreshBtn" class="btn" title="Quick Refresh (Ctrl+R)">
+                    🔄 Refresh
+                </button>
+                <button id="rescanBtn" class="btn" title="Full Rescan (Ctrl+Shift+R)">
+                    🔁 Rescan
+                </button>
+                <button id="exportBtn" class="btn" title="Export (Ctrl+E)">
+                    📤 Export
+                </button>
+                <button id="statsBtn" class="btn" title="View Statistics">
+                    📊 Stats
+                </button>
+            </div>
+        </header>
+
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="control-group">
+                <label for="searchInput">🔍 Search Tags:</label>
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Enter tags (comma separated)..."
+                    title="Search for tags (Ctrl+F)"
+                >
+                <select id="searchMode" title="Search mode">
+                    <option value="AND">AND (all tags)</option>
+                    <option value="OR">OR (any tag)</option>
+                </select>
+                <button id="clearSearchBtn" class="btn btn-small">Clear</button>
+            </div>
+
+            <div class="control-group">
+                <label for="sortBy">Sort By:</label>
+                <select id="sortBy">
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="date-asc">Date (Oldest)</option>
+                    <option value="date-desc">Date (Newest)</option>
+                    <option value="tags-asc">Tags (A-Z)</option>
+                    <option value="tags-desc">Tags (Z-A)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <span id="imageCount" class="image-count">0 images</span>
+                <span id="selectedCount" class="selected-count">0 selected</span>
+            </div>
+        </div>
+
+        <!-- Tag Batch Editor (appears when images selected) -->
+        <div id="batchTagEditor" class="batch-tag-editor" style="display: none;">
+            <div class="batch-tag-content">
+                <label for="batchTagInput">Tags for selected images:</label>
+                <input
+                    type="text"
+                    id="batchTagInput"
+                    placeholder="Enter tags (comma separated)... Press Enter to save"
+                >
+                <button id="applyTagsBtn" class="btn btn-primary">Apply Tags</button>
+                <button id="cancelBatchBtn" class="btn">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Main Gallery Grid -->
+        <main class="gallery-container">
+            <div id="galleryGrid" class="gallery-grid">
+                <div class="empty-state">
+                    <p>📂 Open a folder to start tagging images</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p id="loadingText">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Folder Selection Modal -->
+    <div id="folderModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Open Folder</h2>
+                <button class="modal-close" onclick="closeFolderModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label for="folderPathInput">Folder Path:</label>
+                <input
+                    type="text"
+                    id="folderPathInput"
+                    placeholder="/path/to/images"
+                    class="folder-input"
+                >
+                <p class="help-text">Enter the full path to your image folder</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="openFolder()">Open</button>
+                <button class="btn" onclick="closeFolderModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Details Modal -->
+    <div id="imageModal" class="modal" style="display: none;">
+        <div class="modal-content image-modal-content">
+            <div class="modal-header">
+                <h2 id="imageModalTitle">Image Details</h2>
+                <button class="modal-close" onclick="closeImageModal()">&times;</button>
+            </div>
+            <div class="modal-body image-modal-editor">
+                <div id="modalImageContainer" class="modal-image-container">
+                    <div id="modalImage" class="modal-image-panel">
+                        <button class="nav-arrow nav-arrow-left" onclick="navigateModalImage(-1)">&lsaquo;</button>
+                        <img id="imageModalPreview" src="" alt="Image preview">
+                        <button class="nav-arrow nav-arrow-right" onclick="navigateModalImage(1)">&rsaquo;</button>
+                        <div id="imageDots" class="image-dots"></div>
+                    </div>
+                </div>
+                <div id="modalTagsContainer" class="modal-tags-container">
+                    <div id="modalTagsList" class="modal-tags-list">
+                        <!-- Tags will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveImageTags()">Save</button>
+                <button class="btn" onclick="closeImageModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Config Modal -->
+    <div id="exportModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Export Configuration</h2>
+                <button class="modal-close" onclick="closeExportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Configure export rules for generating markdown galleries. Use <code>|</code> prefix for OR mode.</p>
+                <div id="exportConfigList" class="export-config-list">
+                    <!-- Export config entries will be added here -->
+                </div>
+                <button class="btn btn-small" onclick="addExportRule()">+ Add Rule</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveAndExport()">Save & Export</button>
+                <button class="btn" onclick="saveExportConfig()">Save Only</button>
+                <button class="btn" onclick="closeExportModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="statsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Gallery Statistics</h2>
+                <button class="modal-close" onclick="closeStatsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="statTotalImages">0</div>
+                        <div class="stat-label">Total Images</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statTotalSize">0 MB</div>
+                        <div class="stat-label">Total Size</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statUniqueTags">0</div>
+                        <div class="stat-label">Unique Tags</div>
+                    </div>
+                </div>
+                <div class="tags-cloud" id="tagsCloud">
+                    <!-- Tags will be displayed here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeStatsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
