@@ -1158,11 +1158,6 @@ def index():
                 return;
             }
 
-            const recursiveText = recursive ? ' (recursively)' : '';
-            if (!confirm(`This will refresh modified files in the current folder${recursiveText}. Continue?`)) {
-                return;
-            }
-
             document.getElementById('statusText').textContent = 'Refreshing cache...';
 
             const params = new URLSearchParams({
@@ -1173,14 +1168,16 @@ def index():
             fetch('/api/refresh?' + params, { method: 'POST' })
                 .then(res => res.json())
                 .then(data => {
+                    const total = data.refreshed + data.skipped;
+                    const toastMessage = `Refreshed updated files (${data.refreshed}/${total})`;
                     document.getElementById('statusText').textContent = data.message;
-                    alert(data.message);
+                    showToast(toastMessage, 'success');
                     // Reload images to show updated tags
                     loadImages();
                 })
                 .catch(err => {
                     console.error('Error refreshing:', err);
-                    alert('Error refreshing cache');
+                    showToast('Error refreshing cache', 'error');
                 });
         }
 
