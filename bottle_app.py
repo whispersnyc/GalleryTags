@@ -329,6 +329,99 @@ def index():
         .folder-icon {
             font-size: 16px;
         }
+        /* Image Modal */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .image-modal.active {
+            display: flex;
+        }
+        .image-modal-content {
+            display: flex;
+            flex-direction: column;
+            max-width: 90vw;
+            max-height: 90vh;
+            gap: 15px;
+        }
+        .image-modal-image {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        .image-modal-editor {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 400px;
+        }
+        .image-modal-editor label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        .image-modal-editor textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #bdc3c7;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 4.5em;
+            max-height: 200px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .image-modal-editor textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .image-modal-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #2c3e50;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 3000;
+            pointer-events: none;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.success {
+            background: #27ae60;
+        }
+        .toast.info {
+            background: #3498db;
+        }
         .container {
             max-width: 1400px;
             margin: 20px auto;
@@ -417,6 +510,21 @@ def index():
             <ul class="folder-tree" id="folderTree"></ul>
         </div>
     </div>
+
+    <!-- Image Modal -->
+    <div class="image-modal" id="imageModal">
+        <div class="image-modal-content">
+            <img class="image-modal-image" id="modalImage" src="" alt="">
+            <div class="image-modal-editor">
+                <label for="modalTagsInput">Tags (comma separated):</label>
+                <textarea id="modalTagsInput" rows="3"></textarea>
+                <div class="image-modal-hint">Press Enter to save, Escape to cancel</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
 
     <div class="toolbar">
         <div class="toolbar-content">
@@ -608,6 +716,7 @@ def index():
             images.forEach(img => {
                 const card = document.createElement('div');
                 card.className = 'image-card';
+                card.style.cursor = 'pointer';
 
                 const tags = img.tags ? img.tags.split(',').map(t => t.trim()).filter(t => t) : [];
                 const tagsHtml = tags.length > 0
@@ -625,6 +734,11 @@ def index():
                         <div class="image-tags">${tagsHtml}</div>
                     </div>
                 `;
+
+                // Add click handler to open modal
+                card.addEventListener('click', () => {
+                    openImageModal(img.path, img.name, img.tags || '');
+                });
 
                 gallery.appendChild(card);
             });
@@ -670,6 +784,114 @@ def index():
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Image Modal Functions
+        let currentImagePath = '';
+        let originalTags = '';
+
+        function openImageModal(path, name, tags) {
+            currentImagePath = path;
+            originalTags = tags || '';
+
+            // Set image source
+            document.getElementById('modalImage').src = '/image?path=' + encodeURIComponent(path);
+            document.getElementById('modalImage').alt = name;
+
+            // Set tags input
+            const tagsInput = document.getElementById('modalTagsInput');
+            tagsInput.value = originalTags;
+
+            // Show modal
+            document.getElementById('imageModal').classList.add('active');
+
+            // Focus on input after a short delay to ensure modal is visible
+            setTimeout(() => {
+                tagsInput.focus();
+                tagsInput.setSelectionRange(tagsInput.value.length, tagsInput.value.length);
+            }, 100);
+        }
+
+        function closeImageModal(saved = false) {
+            document.getElementById('imageModal').classList.remove('active');
+            currentImagePath = '';
+            originalTags = '';
+
+            if (saved) {
+                showToast('Edited', 'success');
+            } else {
+                showToast('Cancelled', 'info');
+            }
+        }
+
+        async function saveImageTags() {
+            const newTags = document.getElementById('modalTagsInput').value.trim();
+
+            // Check if tags changed
+            if (newTags === originalTags) {
+                closeImageModal(false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/tags', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        path: currentImagePath,
+                        tags: newTags
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    closeImageModal(true);
+                    // Reload images to show updated tags
+                    loadImages();
+                } else {
+                    alert('Error saving tags: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Error saving tags:', err);
+                alert('Error saving tags: ' + err.message);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+
+            // Show toast
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            // Hide toast after 2 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        // Modal keyboard handlers
+        document.getElementById('modalTagsInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                saveImageTags();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeImageModal(false);
+            }
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('imageModal').addEventListener('click', function(e) {
+            if (e.target.id === 'imageModal') {
+                closeImageModal(false);
+            }
+        });
 
         // Allow Enter key to trigger search
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
@@ -759,6 +981,54 @@ def serve_image():
     filename = os.path.basename(image_path)
 
     return static_file(filename, root=directory)
+
+@app.route('/api/tags', method='POST')
+def api_update_tags():
+    """Update tags for an image"""
+    response.content_type = 'application/json'
+
+    try:
+        # Get JSON data from request body
+        data = request.json
+        if not data:
+            response.status = 400
+            return json.dumps({'error': 'No data provided'})
+
+        image_path = data.get('path', '')
+        new_tags = data.get('tags', '')
+
+        if not image_path:
+            response.status = 400
+            return json.dumps({'error': 'No image path specified'})
+
+        if not os.path.exists(image_path):
+            response.status = 404
+            return json.dumps({'error': 'Image not found'})
+
+        # Security check: ensure the path is within BASE_PATH
+        real_path = os.path.realpath(image_path)
+        real_base = os.path.realpath(BASE_PATH)
+
+        if not real_path.startswith(real_base):
+            response.status = 403
+            return json.dumps({'error': 'Access denied'})
+
+        # Write tags using metadata module
+        from core.metadata import write_tag_metadata
+
+        if write_tag_metadata(image_path, new_tags):
+            # Update cache with new tags
+            cache_manager.update_cache(image_path, new_tags)
+            cache_manager.save_cache()
+
+            return json.dumps({'success': True, 'message': 'Tags updated successfully'})
+        else:
+            response.status = 500
+            return json.dumps({'error': 'Failed to write tags'})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
 
 @app.route('/api/refresh', method='POST')
 def api_refresh():
