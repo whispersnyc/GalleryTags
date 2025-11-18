@@ -231,6 +231,19 @@ def index():
         .toolbar select {
             background: white;
         }
+        .toolbar button.select-btn {
+            background: #95a5a6;
+            transition: background 0.2s;
+        }
+        .toolbar button.select-btn:hover {
+            background: #7f8c8d;
+        }
+        .toolbar button.select-btn.active {
+            background: #3498db;
+        }
+        .toolbar button.select-btn.active:hover {
+            background: #2980b9;
+        }
         .toolbar input[type="text"] {
             flex: 1;
             min-width: 200px;
@@ -664,6 +677,40 @@ def index():
             padding: 40px;
             color: #7f8c8d;
         }
+        /* Floating Edit Button */
+        .floating-edit-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+            display: none;
+            align-items: center;
+            gap: 8px;
+            z-index: 999;
+            transition: all 0.3s;
+        }
+        .floating-edit-btn.visible {
+            display: flex;
+        }
+        .floating-edit-btn:hover {
+            background: #2980b9;
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(52, 152, 219, 0.5);
+        }
+        .floating-edit-btn .count-badge {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -704,9 +751,15 @@ def index():
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
 
+    <!-- Floating Edit Button -->
+    <button class="floating-edit-btn" id="floatingEditBtn" onclick="openMultiEditModal()">
+        ✏️ Edit <span class="count-badge" id="editBtnCount">0</span>
+    </button>
+
     <div class="toolbar">
         <div class="toolbar-content">
             <div class="toolbar-left">
+                <button class="select-btn" id="selectBtn" onclick="toggleSelectionMode()">Select</button>
                 <select id="sortSelect" onchange="applySorting()">
                     <option value="name_asc">Name (ascending)</option>
                     <option value="name_desc">Name (descending)</option>
@@ -764,6 +817,7 @@ def index():
         let selectedImageCards = new Set();
         let isMultiEditMode = false;
         let multiEditImages = [];
+        let isSelectionMode = false;
 
         // Load folder tree on page load
         fetch('/api/folders')
@@ -1106,31 +1160,21 @@ def index():
         }
 
         function handleImageLeftClick(card) {
-            const isCardSelected = selectedImageCards.has(card);
-            const hasSelections = selectedImageCards.size > 0;
-
-            if (hasSelections) {
-                if (selectedImageCards.size === 1) {
-                    // One card selected, unselect and open modal for clicked card
-                    clearImageSelections();
-                    openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
-                } else if (selectedImageCards.size > 1) {
-                    if (isCardSelected) {
-                        // Multiple selected, clicked one is selected - open multi-edit
-                        openMultiEditModal();
-                    } else {
-                        // Multiple selected, clicked one not selected - clear and open single
-                        clearImageSelections();
-                        openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
-                    }
-                }
+            if (isSelectionMode) {
+                // In selection mode: toggle selection
+                toggleCardSelection(card);
             } else {
-                // No selections, open modal normally
+                // Not in selection mode: open modal normally
                 openImageModal(card.dataset.path, card.dataset.name, card.dataset.tags);
             }
         }
 
         function handleImageRightClick(card) {
+            // Right-click is disabled in new design
+            // Could be used for future features
+        }
+
+        function toggleCardSelection(card) {
             if (selectedImageCards.has(card)) {
                 // Unselect
                 selectedImageCards.delete(card);
@@ -1140,6 +1184,7 @@ def index():
                 selectedImageCards.add(card);
                 card.classList.add('selected');
             }
+            updateFloatingEditButton();
         }
 
         function clearImageSelections() {
@@ -1147,6 +1192,34 @@ def index():
                 card.classList.remove('selected');
             });
             selectedImageCards.clear();
+            updateFloatingEditButton();
+        }
+
+        function toggleSelectionMode() {
+            isSelectionMode = !isSelectionMode;
+            const selectBtn = document.getElementById('selectBtn');
+
+            if (isSelectionMode) {
+                selectBtn.classList.add('active');
+                showToast('Selection mode enabled', 'info');
+            } else {
+                selectBtn.classList.remove('active');
+                // Clear selections when exiting selection mode
+                clearImageSelections();
+                showToast('Selection mode disabled', 'info');
+            }
+        }
+
+        function updateFloatingEditButton() {
+            const floatingBtn = document.getElementById('floatingEditBtn');
+            const countBadge = document.getElementById('editBtnCount');
+
+            if (selectedImageCards.size > 0) {
+                floatingBtn.classList.add('visible');
+                countBadge.textContent = selectedImageCards.size;
+            } else {
+                floatingBtn.classList.remove('visible');
+            }
         }
 
         function refreshAll() {
@@ -1230,6 +1303,11 @@ def index():
         }
 
         function openMultiEditModal() {
+            if (selectedImageCards.size === 0) {
+                showToast('No images selected', 'info');
+                return;
+            }
+
             isMultiEditMode = true;
             multiEditImages = Array.from(selectedImageCards).map(card => ({
                 path: card.dataset.path,
@@ -1433,6 +1511,15 @@ def index():
             currentImagePath = '';
             currentImageTags.clear();
             originalTagsString = '';
+
+            // If we saved in multi-edit mode, clear selections and exit selection mode
+            if (saved && isMultiEditMode) {
+                clearImageSelections();
+                if (isSelectionMode) {
+                    isSelectionMode = false;
+                    document.getElementById('selectBtn').classList.remove('active');
+                }
+            }
 
             if (saved) {
                 showToast('Edited', 'success');
