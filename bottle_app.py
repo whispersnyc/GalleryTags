@@ -476,12 +476,11 @@ def index():
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.8);
             z-index: 2000;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
-            padding: 0;
+            padding: 20px;
         }
         .image-modal.active {
             display: flex;
@@ -489,44 +488,20 @@ def index():
         .image-modal-content {
             display: flex;
             flex-direction: column;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
             width: 100%;
-            height: 100%;
-            max-width: 100vw;
-            max-height: 100vh;
-            gap: 0;
-        }
-        .image-modal-image-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 0;
-            cursor: pointer;
+            max-width: 800px;
+            max-height: calc(100vh - 40px);
+            gap: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
         .image-modal-image {
-            max-width: 90vw;
-            max-height: 100%;
-            object-fit: contain;
-            cursor: default;
-        }
-        .image-modal-editor {
-            background: white;
-            padding: 15px;
-            min-width: 500px;
-            max-width: 600px;
             width: 100%;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            height: 40vh;
-            min-height: 300px;
-            max-height: 400px;
-        }
-        .image-modal-editor label {
-            font-weight: 500;
-            color: #2c3e50;
-            font-size: 14px;
-            margin-bottom: 8px;
+            max-height: 60vh;
+            object-fit: contain;
+            border-radius: 4px;
         }
         .modal-tags-container {
             overflow-y: auto;
@@ -537,8 +512,8 @@ def index():
             flex-wrap: wrap;
             gap: 6px;
             align-content: flex-start;
-            flex: 1;
-            min-height: 0;
+            max-height: 200px;
+            min-height: 60px;
         }
         .modal-tags-container.empty {
             align-items: center;
@@ -600,14 +575,14 @@ def index():
         .modal-actions {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
-            justify-content: flex-end;
+            width: 100%;
         }
         .modal-btn {
-            padding: 10px 20px;
+            flex: 1;
+            padding: 12px 20px;
             border: none;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 500;
             cursor: pointer;
             transition: background 0.2s;
@@ -788,19 +763,14 @@ def index():
 
     <!-- Image Modal -->
     <div class="image-modal" id="imageModal">
-        <div class="image-modal-content">
-            <div class="image-modal-image-container" id="imageContainer">
-                <img class="image-modal-image" id="modalImage" src="" alt="">
+        <div class="image-modal-content" id="modalContent">
+            <img class="image-modal-image" id="modalImage" src="" alt="">
+            <div class="modal-tags-container" id="modalTagsContainer">
+                <span>No tags available</span>
             </div>
-            <div class="image-modal-editor">
-                <label>Tags:</label>
-                <div class="modal-tags-container" id="modalTagsContainer">
-                    <span>No tags available</span>
-                </div>
-                <div class="modal-actions">
-                    <button class="modal-btn modal-btn-cancel" onclick="closeImageModal(false)">Cancel</button>
-                    <button class="modal-btn modal-btn-save" onclick="saveImageTags()">Save</button>
-                </div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeImageModal(false)">Cancel</button>
+                <button class="modal-btn modal-btn-save" onclick="saveImageTags()">Save</button>
             </div>
         </div>
     </div>
@@ -1687,25 +1657,23 @@ def index():
             }, 2000);
         }
 
-        // Close modal when clicking outside
+        // Close modal when clicking outside the modal content
         document.getElementById('imageModal').addEventListener('click', function(e) {
             if (e.target.id === 'imageModal') {
                 closeImageModal(false);
             }
         });
 
-        // Close modal when clicking on image container (but not the image itself)
-        document.getElementById('imageContainer').addEventListener('click', function(e) {
-            if (e.target.id === 'imageContainer') {
-                closeImageModal(false);
-            }
-        });
-
-        // Add keyboard handler for Escape key to close modal
+        // Add keyboard handlers for Escape (cancel) and Enter (save)
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && document.getElementById('imageModal').classList.contains('active')) {
-                e.preventDefault();
-                closeImageModal(false);
+            if (document.getElementById('imageModal').classList.contains('active')) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeImageModal(false);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveImageTags();
+                }
             }
         });
     </script>
