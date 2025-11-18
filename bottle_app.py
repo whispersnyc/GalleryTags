@@ -356,6 +356,19 @@ def index():
             color: #2c3e50;
             margin: 0;
         }
+        .tag-bar-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .tag-bar-controls select {
+            padding: 5px 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+            cursor: pointer;
+        }
         .tag-bar-clear {
             background: #e74c3c;
             color: white;
@@ -458,9 +471,9 @@ def index():
             font-size: 13px;
         }
         .modal-tag-button {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border: none;
+            background: #ecf0f1;
+            color: #2c3e50;
+            border: 2px solid #bdc3c7;
             padding: 4px 10px;
             border-radius: 12px;
             cursor: pointer;
@@ -469,11 +482,12 @@ def index():
             user-select: none;
         }
         .modal-tag-button:hover {
-            background: #c8e6c9;
+            background: #d5dbdb;
         }
-        .modal-tag-button .remove {
-            margin-left: 5px;
-            font-weight: bold;
+        .modal-tag-button.active {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-color: #81c784;
         }
         .image-modal-input {
             width: 100%;
@@ -612,13 +626,13 @@ def index():
         <div class="image-modal-content">
             <img class="image-modal-image" id="modalImage" src="" alt="">
             <div class="image-modal-editor">
-                <label>Current Tags:</label>
+                <label>Tags (click to toggle):</label>
                 <div class="modal-tags-container" id="modalTagsContainer">
-                    <span>No tags</span>
+                    <span>No tags available</span>
                 </div>
-                <label for="modalTagInput">Add/Remove Tags:</label>
-                <input type="text" id="modalTagInput" class="image-modal-input" placeholder="Type tag name and press Enter...">
-                <div class="image-modal-hint">Click tags to remove • Type to add • Enter to save • Escape to cancel</div>
+                <label for="modalTagInput">Add New Tag:</label>
+                <input type="text" id="modalTagInput" class="image-modal-input" placeholder="Type new tag name and press Enter...">
+                <div class="image-modal-hint">Click tags to toggle • Type to add new • Enter to save • Escape to cancel</div>
             </div>
         </div>
     </div>
@@ -636,10 +650,6 @@ def index():
                 <input type="checkbox" id="recursiveToggle">
                 Recursive
             </label>
-            <select id="searchMode">
-                <option value="AND">AND</option>
-                <option value="OR">OR</option>
-            </select>
             <button onclick="toggleTagBar()">🏷️ Tags</button>
             <select id="sortSelect">
                 <option value="name_asc">Name (ascending)</option>
@@ -659,7 +669,13 @@ def index():
         <div class="tag-bar-content">
             <div class="tag-bar-header">
                 <h3>Filter by Tags (<span id="tagCount">0</span> tags found):</h3>
-                <button class="tag-bar-clear" onclick="clearSelectedTags()">Clear Selection</button>
+                <div class="tag-bar-controls">
+                    <select id="searchMode" onchange="filterImages()">
+                        <option value="AND">AND</option>
+                        <option value="OR">OR</option>
+                    </select>
+                    <button class="tag-bar-clear" onclick="clearSelectedTags()">Clear Selection</button>
+                </div>
             </div>
             <div class="tag-bar-tags" id="tagBarTags">
                 <span style="color: #95a5a6; font-style: italic;">Load a folder to see tags...</span>
@@ -1035,24 +1051,31 @@ def index():
             const container = document.getElementById('modalTagsContainer');
             container.innerHTML = '';
 
-            if (currentImageTags.size === 0) {
+            if (allTags.size === 0) {
                 container.classList.add('empty');
-                container.innerHTML = '<span>No tags</span>';
+                container.innerHTML = '<span>No tags available</span>';
                 return;
             }
 
             container.classList.remove('empty');
 
-            // Sort tags alphabetically
-            const sortedTags = Array.from(currentImageTags).sort();
+            // Sort all tags alphabetically
+            const sortedTags = Array.from(allTags).sort();
 
             sortedTags.forEach(tag => {
                 const btn = document.createElement('button');
                 btn.className = 'modal-tag-button';
-                btn.innerHTML = `${escapeHtml(tag)}<span class="remove">×</span>`;
+
+                // Check if this tag is active for the current image
+                const isActive = currentImageTags.has(tag);
+                if (isActive) {
+                    btn.classList.add('active');
+                }
+
+                btn.textContent = tag;
                 btn.onclick = (e) => {
                     e.preventDefault();
-                    removeModalTag(tag);
+                    toggleModalTag(tag, btn);
                     // Refocus input
                     document.getElementById('modalTagInput').focus();
                 };
@@ -1060,15 +1083,24 @@ def index():
             });
         }
 
-        function removeModalTag(tag) {
-            currentImageTags.delete(tag);
-            renderModalTags();
+        function toggleModalTag(tag, button) {
+            if (currentImageTags.has(tag)) {
+                currentImageTags.delete(tag);
+                button.classList.remove('active');
+            } else {
+                currentImageTags.add(tag);
+                button.classList.add('active');
+            }
         }
 
         function addModalTag(tag) {
-            tag = tag.trim();
+            tag = tag.trim().toLowerCase();
             if (tag) {
+                // Add to current image tags
                 currentImageTags.add(tag);
+                // Add to all tags if new
+                allTags.add(tag);
+                // Re-render to show the new tag
                 renderModalTags();
             }
         }
